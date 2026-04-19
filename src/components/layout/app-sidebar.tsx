@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Dasbor", icon: LayoutDashboard },
-  { href: "/stock", label: "Manajemen stok", icon: Package },
+  { href: "/stock", label: "Inventori", icon: Package },
   { href: "/expenses", label: "Pengeluaran harian", icon: ShoppingCart },
   { href: "/invoice-exchange", label: "Penukaran faktur", icon: Receipt },
   { href: "/receivables", label: "Piutang", icon: Wallet },

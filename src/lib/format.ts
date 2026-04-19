@@ -26,3 +26,25 @@ export function formatIntegerQty(value: string | number | null | undefined): str
   if (Number.isNaN(n)) return "—";
   return String(Math.max(0, Math.round(n)));
 }
+
+/** Stok / nilai desimal dari API (string DECIMAL). */
+export function formatDecimalQty(
+  value: string | number | null | undefined,
+  maxFractionDigits = 6,
+): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = typeof value === "string" ? Number(value.trim()) : value;
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("id-ID", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  });
+}
+
+/** Margin persen dari kolom generated di backend. */
+export function formatMarginPercent(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toLocaleString("id-ID", { maximumFractionDigits: 2 })}%`;
+}

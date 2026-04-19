@@ -9,11 +9,16 @@ import { api } from "@/lib/api";
 import { formatIdr } from "@/lib/format";
 
 export default function DashboardPage() {
-  const stock = useQuery({
-    queryKey: ["stock-meta"],
+  const inventoryDash = useQuery({
+    queryKey: ["dash-inventory"],
     queryFn: async () => {
-      const { data } = await api.get<{ meta: { total: number } }>("/stock", { params: { limit: 1 } });
-      return data;
+      const [raw, fp] = await Promise.all([
+        api.get<{ meta: { total: number } }>("/raw-materials", { params: { page: 1, limit: 1 } }),
+        api.get<{ meta: { total: number } }>("/finished-products", {
+          params: { page: 1, limit: 1 },
+        }),
+      ]);
+      return { rawTotal: raw.data.meta.total, fpTotal: fp.data.meta.total };
     },
   });
 
@@ -60,8 +65,26 @@ export default function DashboardPage() {
         </PageHeader>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total stok (item)" icon={Package} tone="blue">
-            {stock.data?.meta?.total ?? "—"}
+          <StatCard
+            label="SKU inventori"
+            icon={Package}
+            tone="blue"
+            footer="Bahan baku dan barang jadi"
+          >
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-lg font-bold sm:text-2xl">
+              <span className="tabular-nums">
+                <span className="mr-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                  Bahan
+                </span>
+                {inventoryDash.data?.rawTotal ?? "—"}
+              </span>
+              <span className="tabular-nums">
+                <span className="mr-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                  Jadi
+                </span>
+                {inventoryDash.data?.fpTotal ?? "—"}
+              </span>
+            </div>
           </StatCard>
           <StatCard label="Belanja hari ini" icon={ShoppingCart} tone="emerald">
             {expenseSummary.data ? formatIdr(expenseSummary.data.data.totalExpenses) : "—"}

@@ -13,6 +13,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- gate client-only setelah cek token
     setReady(true);
   }, [router]);
 

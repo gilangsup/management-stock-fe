@@ -395,7 +395,7 @@ export default function ExpensesPage() {
                 <div className="space-y-2">
                   <Label>Barang dari stok</Label>
                   <p className="text-xs text-muted-foreground">
-                    Nama bisa sama antar batch; pilih baris yang benar (nomor ID sama dengan di sistem).
+                    Nama bisa sama antar batch; pilih baris yang sesuai (lihat tanggal produksi / batch).
                   </p>
                   {stockPicker.isLoading ? (
                     <p className="text-xs text-muted-foreground">Memuat daftar stok…</p>
@@ -436,7 +436,7 @@ export default function ExpensesPage() {
                           <span className="min-w-0 flex-1">
                             <span className="font-semibold text-foreground">{s.itemName}</span>
                             <span className="mt-0.5 block text-xs text-muted-foreground">
-                              ID #{s.id} · produksi {formatDate(s.productionDate)}
+                              Produksi {formatDate(s.productionDate)}
                               {batch ? ` · batch ${batch}` : ""}
                             </span>
                             <span className="mt-1 block text-xs font-medium text-indigo-800 dark:text-indigo-200">
@@ -450,15 +450,16 @@ export default function ExpensesPage() {
                   {selectedStock ? (
                     <p className="rounded-md bg-indigo-50/80 px-2 py-1.5 text-xs text-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-100">
                       Akan mengurangi stok{" "}
-                      <strong>
-                        #{selectedStock.id} — {selectedStock.itemName}
-                      </strong>{" "}
+                      <strong>{selectedStock.itemName}</strong>
+                      {selectedStock.batchCode?.trim()
+                        ? ` (batch ${selectedStock.batchCode.trim()})`
+                        : ""}{" "}
                       (sisa saat ini {formatIntegerQty(selectedStock.quantity)} unit).
                     </p>
                   ) : form.stockItemId ? (
                     <p className="text-xs text-amber-700 dark:text-amber-400">
-                      ID yang dipilih tidak ada di daftar terbaru. Tutup dialog dan buka lagi, lalu pilih
-                      ulang.
+                      Baris yang dipilih tidak ada di daftar terbaru. Tutup dialog dan buka lagi, lalu
+                      pilih ulang.
                     </p>
                   ) : null}
                 </div>

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { formatDate, formatIdr } from "@/lib/format";
+import { labelForHotelValue } from "@/lib/select-labels";
 import { cn } from "@/lib/utils";
 
 type Hotel = { id: string; name: string };
@@ -220,13 +221,18 @@ export default function InvoiceExchangePage() {
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
               <Label>Hotel</Label>
-              <Select value={hotelId} onValueChange={(v) => setHotelId(v ?? "")}>
+              <Select
+                value={hotelId ? String(hotelId) : undefined}
+                onValueChange={(v) => setHotelId(v ?? "")}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Pilih hotel" />
+                  <SelectValue placeholder="Pilih hotel">
+                    {(val) => labelForHotelValue(hotels.data, val) ?? undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(hotels.data ?? []).map((h) => (
-                    <SelectItem key={h.id} value={h.id}>
+                    <SelectItem key={h.id} value={String(h.id)}>
                       {h.name}
                     </SelectItem>
                   ))}
