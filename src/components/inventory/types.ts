@@ -27,8 +27,9 @@ export type RawMaterialRow = {
   itemCode: string | null;
   name: string;
   unit: { id: string; code: string; name: string };
-  unitPrice: string;
-  quantityOnHand: string;
+  /** Sama sumber master dengan barang jadi — prefix + 3 digit urut per kategori. */
+  snackCategory: { id: string; name: string; codePrefix: string };
+  categorySeq: number;
   createdAt: string;
   updatedAt: string;
 };

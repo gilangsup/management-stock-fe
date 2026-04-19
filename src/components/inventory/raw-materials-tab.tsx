@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Plus, Trash2, Wheat } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,15 +31,26 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { formatDecimalQty, formatIdr } from "@/lib/format";
-import { labelForUnitValue } from "@/lib/select-labels";
-import type { ApiListResponse, RawMaterialRow, UnitRow } from "./types";
+import { labelForSnackCategoryValue, labelForUnitValue } from "@/lib/select-labels";
+import type { ApiListResponse, RawMaterialRow, SnackCategoryRow, UnitRow } from "./types";
 
 const PAGE_SIZE = 15;
 
-type Props = { isAdmin: boolean; units: UnitRow[] | undefined; unitsLoading: boolean };
+type Props = {
+  isAdmin: boolean;
+  units: UnitRow[] | undefined;
+  unitsLoading: boolean;
+  categories: SnackCategoryRow[] | undefined;
+  categoriesLoading: boolean;
+};
 
-export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
+export function RawMaterialsTab({
+  isAdmin,
+  units,
+  unitsLoading,
+  categories: categoriesProp,
+  categoriesLoading,
+}: Props) {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -47,16 +58,13 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editRow, setEditRow] = useState<RawMaterialRow | null>(null);
-  const [adjustRow, setAdjustRow] = useState<RawMaterialRow | null>(null);
   const [deleteRow, setDeleteRow] = useState<RawMaterialRow | null>(null);
 
   const [form, setForm] = useState({
     name: "",
     unitId: "",
-    unitPrice: "0",
-    quantityOnHand: "0",
+    snackCategoryId: "",
   });
-  const [adjustDelta, setAdjustDelta] = useState("");
 
   const list = useQuery({
     queryKey: ["raw-materials", { page, search, unitFilter }],
@@ -84,8 +92,7 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
         {
           name: form.name.trim(),
           unitId: form.unitId,
-          unitPrice: Number(form.unitPrice) || 0,
-          quantityOnHand: Number(form.quantityOnHand) || 0,
+          snackCategoryId: form.snackCategoryId,
         },
       );
       return data;
@@ -93,7 +100,7 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
     onSuccess: () => {
       toast.success("Bahan baku ditambahkan");
       setCreateOpen(false);
-      setForm({ name: "", unitId: "", unitPrice: "0", quantityOnHand: "0" });
+      setForm({ name: "", unitId: "", snackCategoryId: "" });
       qc.invalidateQueries({ queryKey: ["raw-materials"] });
       qc.invalidateQueries({ queryKey: ["dash-inventory"] });
     },
@@ -108,8 +115,6 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
         {
           name: form.name.trim(),
           unitId: form.unitId || undefined,
-          unitPrice: Number(form.unitPrice),
-          quantityOnHand: Number(form.quantityOnHand),
         },
       );
       return data;
@@ -120,22 +125,6 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
       qc.invalidateQueries({ queryKey: ["raw-materials"] });
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "Gagal memperbarui")),
-  });
-
-  const adjust = useMutation({
-    mutationFn: async () => {
-      if (!adjustRow) return;
-      const d = Number(adjustDelta);
-      if (!Number.isFinite(d) || d === 0) throw new Error("invalid");
-      await api.patch(`/raw-materials/${adjustRow.id}`, { quantityDelta: d });
-    },
-    onSuccess: () => {
-      toast.success("Stok disesuaikan");
-      setAdjustRow(null);
-      setAdjustDelta("");
-      qc.invalidateQueries({ queryKey: ["raw-materials"] });
-    },
-    onError: (e) => toast.error(getApiErrorMessage(e, "Gagal menyesuaikan stok")),
   });
 
   const remove = useMutation({
@@ -155,15 +144,24 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
     setForm({
       name: row.name,
       unitId: row.unit.id,
-      unitPrice: String(Number(row.unitPrice)),
-      quantityOnHand: String(Number(row.quantityOnHand)),
+      snackCategoryId: "",
     });
     setEditRow(row);
   };
 
+  const catList = categoriesProp ?? [];
   const firstUnitId = units?.[0]?.id ?? "";
+  const firstCatId = catList[0]?.id ?? "";
+
   const canSubmitCreate =
-    form.name.trim() && form.unitId && !create.isPending && !unitsLoading && !!units?.length;
+    form.name.trim() &&
+    form.unitId &&
+    form.snackCategoryId &&
+    !create.isPending &&
+    !unitsLoading &&
+    !categoriesLoading &&
+    !!units?.length &&
+    catList.length > 0;
 
   const filterBar = useMemo(
     () => (
@@ -172,7 +170,7 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
           <div className="space-y-2 sm:col-span-2">
             <Label>Cari nama / kode</Label>
             <Input
-              placeholder="Beras, RM000001…"
+              placeholder="Beras, BB001…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -221,14 +219,13 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
           <Button
             type="button"
             variant="outline"
-            className="border-emerald-200/80 bg-emerald-50/50 dark:border-emerald-500/30 dark:bg-emerald-950/20"
-            disabled={!units?.length}
+            className="border-primary/30 bg-primary/5"
+            disabled={!units?.length || !catList.length}
             onClick={() => {
               setForm({
                 name: "",
                 unitId: firstUnitId,
-                unitPrice: "0",
-                quantityOnHand: "0",
+                snackCategoryId: firstCatId,
               });
               setCreateOpen(true);
             }}
@@ -239,7 +236,7 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
         </div>
       </div>
     ),
-    [search, unitFilter, units, firstUnitId],
+    [search, unitFilter, units, firstUnitId, firstCatId, catList.length],
   );
 
   return (
@@ -252,46 +249,32 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
             <TableRow>
               <TableHead>Kode</TableHead>
               <TableHead>Nama</TableHead>
+              <TableHead>Kategori (snack)</TableHead>
               <TableHead>Satuan</TableHead>
-              <TableHead className="text-right">Harga / satuan</TableHead>
-              <TableHead className="text-right">Stok</TableHead>
               <TableHead className="w-[200px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {(list.data?.data ?? []).map((row) => (
               <TableRow key={row.id}>
-                <TableCell className="font-mono text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                <TableCell className="font-mono text-sm font-medium text-primary">
                   {row.itemCode ?? "—"}
                 </TableCell>
                 <TableCell className="font-semibold text-slate-800 dark:text-slate-100">
                   {row.name}
                 </TableCell>
                 <TableCell>
+                  <span className="text-muted-foreground">{row.snackCategory.name}</span>
+                  <span className="ml-1 text-xs text-slate-500">
+                    ({row.snackCategory.codePrefix})
+                  </span>
+                </TableCell>
+                <TableCell>
                   <span className="text-muted-foreground">{row.unit.name}</span>{" "}
                   <span className="text-xs text-slate-500">({row.unit.code})</span>
                 </TableCell>
-                <TableCell className="text-right tabular-nums font-medium">
-                  {formatIdr(row.unitPrice)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums font-semibold text-emerald-800 dark:text-emerald-200">
-                  {formatDecimalQty(row.quantityOnHand)}
-                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap justify-end gap-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="border-emerald-200"
-                      onClick={() => {
-                        setAdjustRow(row);
-                        setAdjustDelta("");
-                      }}
-                    >
-                      <Wheat className="mr-1 size-3" />
-                      Stok
-                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -318,14 +301,14 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
             ))}
             {!list.data?.data?.length && (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                   {list.isLoading ? "Memuat…" : "Belum ada bahan baku."}
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
-        <div className="flex flex-col gap-2 border-t border-emerald-100/80 bg-gradient-to-r from-emerald-50/40 to-teal-50/30 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:from-emerald-950/15 dark:to-teal-950/15 dark:text-slate-400">
+        <div className="flex flex-col gap-2 border-t border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>
             Menampilkan {(page - 1) * limit + 1}–{Math.min(page * limit, total)} dari {total}
           </span>
@@ -357,10 +340,33 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
           <DialogHeader>
             <DialogTitle>Bahan baku baru</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              Kode barang diisi otomatis oleh server (format RM + nomor urut).
+              Kode mengikuti prefix kategori snack yang sama dengan barang jadi (prefix + 3 digit
+              urut per kategori). Harga tidak di master — dicatat lewat pembelian harian.
             </p>
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label>Kategori (master snack)</Label>
+              <Select
+                value={form.snackCategoryId ? String(form.snackCategoryId) : undefined}
+                onValueChange={(v) => setForm((f) => ({ ...f, snackCategoryId: v ?? "" }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih kategori">
+                    {(val) =>
+                      labelForSnackCategoryValue(catList, val, { withPrefix: true }) ?? undefined
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {catList.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.codePrefix ? `${c.name} (${c.codePrefix})` : c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Nama</Label>
               <Input
@@ -389,24 +395,6 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Harga per satuan (Rp)</Label>
-                <Input
-                  inputMode="decimal"
-                  value={form.unitPrice}
-                  onChange={(e) => setForm((f) => ({ ...f, unitPrice: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Stok awal</Label>
-                <Input
-                  inputMode="decimal"
-                  value={form.quantityOnHand}
-                  onChange={(e) => setForm((f) => ({ ...f, quantityOnHand: e.target.value }))}
-                />
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
@@ -428,6 +416,11 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Ubah bahan baku</DialogTitle>
+            {editRow ? (
+              <p className="text-sm text-muted-foreground">
+                Kode {editRow.itemCode ?? "—"} tidak berubah. Hanya nama dan satuan.
+              </p>
+            ) : null}
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
@@ -457,24 +450,6 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Harga per satuan</Label>
-                <Input
-                  inputMode="decimal"
-                  value={form.unitPrice}
-                  onChange={(e) => setForm((f) => ({ ...f, unitPrice: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Stok (nilai absolut)</Label>
-                <Input
-                  inputMode="decimal"
-                  value={form.quantityOnHand}
-                  onChange={(e) => setForm((f) => ({ ...f, quantityOnHand: e.target.value }))}
-                />
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setEditRow(null)}>
@@ -485,52 +460,6 @@ export function RawMaterialsTab({ isAdmin, units, unitsLoading }: Props) {
               className="btn-gradient border-0"
               disabled={!form.name.trim() || !form.unitId || patch.isPending}
               onClick={() => patch.mutate()}
-            >
-              Simpan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!adjustRow} onOpenChange={(o) => !o && setAdjustRow(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Penyesuaian stok</DialogTitle>
-            {adjustRow ? (
-              <p className="text-sm text-muted-foreground">
-                {adjustRow.name} — stok:{" "}
-                <span className="font-semibold text-foreground">
-                  {formatDecimalQty(adjustRow.quantityOnHand)}
-                </span>
-              </p>
-            ) : null}
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label>Tambah / kurangi</Label>
-            <Input
-              inputMode="decimal"
-              placeholder="10 atau -2.5"
-              value={adjustDelta}
-              onChange={(e) => setAdjustDelta(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Positif menambah stok; negatif mengurangi. Hasil tidak di bawah nol.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setAdjustRow(null)}>
-              Batal
-            </Button>
-            <Button
-              type="button"
-              className="btn-gradient border-0"
-              disabled={
-                adjust.isPending ||
-                !adjustDelta.trim() ||
-                Number(adjustDelta) === 0 ||
-                Number.isNaN(Number(adjustDelta))
-              }
-              onClick={() => adjust.mutate()}
             >
               Simpan
             </Button>

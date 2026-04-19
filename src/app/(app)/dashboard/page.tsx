@@ -26,7 +26,7 @@ export default function DashboardPage() {
     queryKey: ["expense-summary-dash"],
     queryFn: async () => {
       const { data } = await api.get<{
-        data: { totalExpenses: string; totalItemsPurchased: string };
+        data: { totalExpenses: string; totalQty: string };
       }>("/expenses/summary", { params: { range: "today" } });
       return data;
     },
@@ -56,10 +56,10 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-6xl space-y-8">
         <PageHeader
           title="Dasbor"
-          description="Ringkasan operasional harian dalam satu layar — warna menandakan kategori indikator."
+          description="Ringkasan operasional harian dalam satu layar."
         >
-          <span className="inline-flex items-center gap-2 rounded-full border border-indigo-200/80 bg-white/90 px-3 py-1.5 text-xs font-medium text-indigo-700 shadow-sm dark:border-indigo-500/30 dark:bg-indigo-950/40 dark:text-indigo-200">
-            <Sparkles className="size-3.5 text-amber-500" />
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+            <Sparkles className="size-3.5 text-muted-foreground" />
             Ringkasan langsung
           </span>
         </PageHeader>

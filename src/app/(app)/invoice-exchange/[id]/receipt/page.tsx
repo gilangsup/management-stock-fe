@@ -48,14 +48,14 @@ export default function ReceiptPrintPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-indigo-50/80 to-white p-8 text-slate-900 print:bg-white print:p-6">
-      <div className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-indigo-100/80 bg-white p-8 shadow-xl shadow-indigo-200/30 print:rounded-none print:border-0 print:shadow-none">
-        <div className="-mx-8 -mt-8 mb-6 h-1.5 bg-gradient-to-r from-sky-500 via-violet-500 to-fuchsia-500 print:hidden" />
+    <div className="min-h-screen bg-gradient-to-b from-muted/80 to-background p-8 text-foreground print:bg-white print:p-6">
+      <div className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-border bg-card p-8 shadow-sm print:rounded-none print:border-0 print:shadow-none">
+        <div className="-mx-8 -mt-8 mb-6 h-1 bg-primary/35 print:hidden" />
         <div className="text-center">
-          <h1 className="bg-gradient-to-r from-indigo-800 to-violet-700 bg-clip-text text-xl font-bold text-transparent print:text-slate-900">
+          <h1 className="text-xl font-bold text-foreground print:text-foreground">
             KWITANSI
           </h1>
-          <p className="text-sm text-indigo-600/80 print:text-slate-600">
+          <p className="text-sm text-muted-foreground print:text-muted-foreground">
             Executive Architect — Penukaran Faktur
           </p>
         </div>

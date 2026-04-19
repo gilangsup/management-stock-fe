@@ -120,7 +120,7 @@ export default function ReceivablesPage() {
                   <TableCell className="text-right tabular-nums">
                     {formatIdr(row.paidAmount)}
                   </TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums text-amber-700 dark:text-amber-300">
+                  <TableCell className="text-right font-semibold tabular-nums text-destructive">
                     {formatIdr(row.outstanding)}
                   </TableCell>
                   <TableCell>
@@ -141,7 +141,7 @@ export default function ReceivablesPage() {
                       <Button
                         type="button"
                         size="sm"
-                        className="border-indigo-200 bg-white hover:bg-indigo-50 dark:border-indigo-500/40 dark:bg-transparent"
+                        className="border-primary/30 bg-background hover:bg-primary/5"
                         variant="outline"
                         onClick={() => {
                           setSelected(row);
@@ -157,7 +157,7 @@ export default function ReceivablesPage() {
                         href={`/invoice-exchange/${row.invoiceExchangeId}/receipt`}
                         className={cn(
                           buttonVariants({ variant: "ghost", size: "sm" }),
-                          "text-violet-700 hover:bg-violet-100 dark:text-violet-300 dark:hover:bg-violet-950/50",
+                          "text-primary hover:bg-primary/10",
                         )}
                       >
                         Lihat

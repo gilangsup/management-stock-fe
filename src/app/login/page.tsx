@@ -44,24 +44,20 @@ export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4">
       <div
-        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#5a6d82] via-[#4a5c6e] to-[#3d4d5f]"
         aria-hidden
       />
       <div
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(255,255,255,0.22)_0%,transparent_50%),radial-gradient(ellipse_at_80%_80%,rgba(56,189,248,0.35)_0%,transparent_45%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(255,255,255,0.08)_0%,transparent_55%)]"
         aria-hidden
       />
       <div
-        className="pointer-events-none absolute -left-24 top-1/4 h-72 w-72 rounded-full bg-cyan-400/30 blur-3xl"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute -right-20 bottom-1/4 h-80 w-80 rounded-full bg-violet-500/25 blur-3xl"
+        className="pointer-events-none absolute -left-24 top-1/4 h-64 w-64 rounded-full bg-white/10 blur-3xl"
         aria-hidden
       />
 
       <div className="relative mb-10 flex items-center gap-4 text-white">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-white/15 shadow-lg shadow-black/10 ring-2 ring-white/25 backdrop-blur-sm">
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-white/12 ring-1 ring-white/20 backdrop-blur-sm">
           <Building2 className="size-7" />
         </div>
         <div>
@@ -70,24 +66,24 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <Card className="relative w-full max-w-md border-white/20 bg-white/90 shadow-2xl shadow-indigo-950/40 ring-1 ring-white/40 backdrop-blur-xl dark:bg-slate-900/90 dark:ring-white/10">
+      <Card className="relative w-full max-w-md border-white/20 bg-white/96 shadow-lg shadow-black/10 ring-1 ring-white/25 backdrop-blur-sm dark:bg-card/95 dark:ring-border">
         <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-xl font-bold text-slate-900 dark:text-white">Masuk</CardTitle>
-          <CardDescription className="text-slate-600 dark:text-slate-400">
+          <CardTitle className="text-xl font-bold text-foreground">Masuk</CardTitle>
+          <CardDescription className="text-muted-foreground">
             Gunakan akun yang sudah didaftarkan admin.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-slate-700 dark:text-slate-300">
+              <Label htmlFor="email" className="text-foreground">
                 Email
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-indigo-400" />
+                <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="email"
-                  className="h-11 border-indigo-100 pl-10 dark:border-indigo-500/20"
+                  className="h-11 border-border pl-10"
                   type="email"
                   autoComplete="email"
                   required
@@ -97,14 +93,14 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-slate-700 dark:text-slate-300">
+              <Label htmlFor="password" className="text-foreground">
                 Kata sandi
               </Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-indigo-400" />
+                <Lock className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="password"
-                  className="h-11 border-indigo-100 pl-10 dark:border-indigo-500/20"
+                  className="h-11 border-border pl-10"
                   type="password"
                   autoComplete="current-password"
                   required
@@ -114,14 +110,14 @@ export default function LoginPage() {
                 />
               </div>
             </div>
-            <Button type="submit" className="h-11 w-full btn-gradient border-0 text-base font-semibold shadow-lg" disabled={loading}>
+            <Button type="submit" className="h-11 w-full btn-gradient border-0 text-base font-semibold" disabled={loading}>
               {loading ? "Memproses…" : "Masuk"}
             </Button>
           </form>
         </CardContent>
       </Card>
 
-      <p className="relative mt-8 text-center text-xs text-white/70">
+      <p className="relative mt-8 text-center text-xs text-white/55">
         Akses terbatas · hubungi admin untuk undangan akun
       </p>
     </div>

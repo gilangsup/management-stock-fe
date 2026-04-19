@@ -46,8 +46,6 @@ export default function InvoiceExchangePage() {
   const qc = useQueryClient();
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [open, setOpen] = useState(false);
-  const [hotelOpen, setHotelOpen] = useState(false);
-  const [hotelName, setHotelName] = useState("");
   const [hotelId, setHotelId] = useState<string>("");
   const [exchangeDate, setExchangeDate] = useState(today);
   const [notes, setNotes] = useState("");
@@ -75,21 +73,6 @@ export default function InvoiceExchangePage() {
       }>("/invoice-exchanges");
       return data.data;
     },
-  });
-
-  const createHotel = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post<{ data: Hotel }>("/hotels", { name: hotelName });
-      return data.data;
-    },
-    onSuccess: (h) => {
-      toast.success("Hotel ditambahkan");
-      setHotelOpen(false);
-      setHotelName("");
-      setHotelId(h.id);
-      qc.invalidateQueries({ queryKey: ["hotels"] });
-    },
-    onError: () => toast.error("Gagal menyimpan hotel"),
   });
 
   const createExchange = useMutation({
@@ -124,14 +107,6 @@ export default function InvoiceExchangePage() {
           title="Penukaran faktur"
           description="Penukaran faktur per hotel — cetak kwitansi dari total baris."
         >
-          <Button
-            type="button"
-            variant="outline"
-            className="border-violet-200/90 bg-white/90 hover:bg-violet-50 dark:border-violet-500/30"
-            onClick={() => setHotelOpen(true)}
-          >
-            Tambah hotel
-          </Button>
           <Button type="button" className="btn-gradient border-0" onClick={() => setOpen(true)}>
             <Plus className="mr-2 size-4" />
             Buat penukaran
@@ -157,7 +132,7 @@ export default function InvoiceExchangePage() {
                   </TableCell>
                   <TableCell>{formatDate(row.exchangeDate)}</TableCell>
                   <TableCell>{row.receiptNumber}</TableCell>
-                  <TableCell className="text-right font-semibold text-violet-700 dark:text-violet-300">
+                  <TableCell className="text-right font-semibold text-primary">
                     {formatIdr(row.totalAmount)}
                   </TableCell>
                   <TableCell>
@@ -167,7 +142,7 @@ export default function InvoiceExchangePage() {
                       rel="noreferrer"
                       className={cn(
                         buttonVariants({ variant: "outline", size: "sm" }),
-                        "border-violet-200 bg-violet-50/80 text-violet-800 hover:bg-violet-100 dark:border-violet-500/40 dark:bg-violet-950/40 dark:text-violet-200",
+                        "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10",
                       )}
                     >
                       <Printer className="mr-1 size-3" />
@@ -187,31 +162,6 @@ export default function InvoiceExchangePage() {
           </Table>
         </div>
       </div>
-
-      <Dialog open={hotelOpen} onOpenChange={setHotelOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Hotel baru</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label>Nama hotel</Label>
-            <Input value={hotelName} onChange={(e) => setHotelName(e.target.value)} />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setHotelOpen(false)}>
-              Batal
-            </Button>
-            <Button
-              type="button"
-              className="btn-gradient border-0"
-              disabled={!hotelName.trim() || createHotel.isPending}
-              onClick={() => createHotel.mutate()}
-            >
-              Simpan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -238,6 +188,18 @@ export default function InvoiceExchangePage() {
                   ))}
                 </SelectContent>
               </Select>
+              {!hotels.data?.length && !hotels.isLoading ? (
+                <p className="text-xs text-muted-foreground">
+                  Belum ada hotel. Tambahkan di{" "}
+                  <Link
+                    href="/stock/harga-hotel"
+                    className="font-medium text-primary underline underline-offset-2 hover:text-primary/90"
+                  >
+                    Inventori → Harga hotel
+                  </Link>{" "}
+                  (Master hotel).
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label>Tanggal</Label>

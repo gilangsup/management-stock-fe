@@ -211,7 +211,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
           <Button
             type="button"
             variant="outline"
-            className="border-violet-200/80 bg-violet-50/50 dark:border-violet-500/30 dark:bg-violet-950/20"
+            className="border-primary/30 bg-primary/5"
             disabled={!categories?.length}
             onClick={() => {
               setForm({
@@ -254,7 +254,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
           <TableBody>
             {(list.data?.data ?? []).map((row) => (
               <TableRow key={row.id}>
-                <TableCell className="font-mono text-sm font-medium text-violet-800 dark:text-violet-200">
+                <TableCell className="font-mono text-sm font-medium text-primary">
                   {row.itemCode}
                 </TableCell>
                 <TableCell className="font-semibold text-slate-800 dark:text-slate-100">
@@ -302,7 +302,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
             )}
           </TableBody>
         </Table>
-        <div className="flex flex-col gap-2 border-t border-violet-100/80 bg-gradient-to-r from-violet-50/40 to-indigo-50/30 px-4 py-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:from-violet-950/15 dark:to-indigo-950/15 dark:text-slate-400">
+        <div className="flex flex-col gap-2 border-t border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>
             Menampilkan {(page - 1) * limit + 1}–{Math.min(page * limit, total)} dari {total}
           </span>

@@ -3,8 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Save, Trash2 } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -143,7 +144,7 @@ function HotelSellPricesGrid({
           <TableBody>
             {(grid.data?.data ?? []).map((row) => (
               <TableRow key={row.finishedProductId}>
-                <TableCell className="font-mono text-sm font-medium text-violet-800 dark:text-violet-200">
+                <TableCell className="font-mono text-sm font-medium text-primary">
                   {row.itemCode}
                 </TableCell>
                 <TableCell className="font-medium text-slate-800 dark:text-slate-100">
@@ -166,7 +167,7 @@ function HotelSellPricesGrid({
                     }
                   />
                 </TableCell>
-                <TableCell className="text-right tabular-nums text-emerald-700 dark:text-emerald-300">
+                <TableCell className="text-right tabular-nums text-success">
                   {formatMarginPercent(row.marginPercent)}
                 </TableCell>
                 <TableCell>
@@ -175,7 +176,7 @@ function HotelSellPricesGrid({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="border-violet-200"
+                      className="border-primary/30"
                       disabled={upsert.isPending}
                       onClick={() => saveRow(row)}
                     >
@@ -244,9 +245,12 @@ function HotelSellPricesGrid({
 }
 
 export function HotelSellPricesTab({ isAdmin }: Props) {
+  const qc = useQueryClient();
   const [hotelId, setHotelId] = useState("");
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
+  const [hotelDialogOpen, setHotelDialogOpen] = useState(false);
+  const [newHotelName, setNewHotelName] = useState("");
 
   const hotels = useQuery({
     queryKey: ["hotels"],
@@ -257,17 +261,119 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
     staleTime: 60_000,
   });
 
+  const createHotel = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<{ data: Hotel }>("/hotels", { name: newHotelName.trim() });
+      return data.data;
+    },
+    onSuccess: (h) => {
+      toast.success("Hotel ditambahkan");
+      setHotelDialogOpen(false);
+      setNewHotelName("");
+      setHotelId(h.id);
+      qc.invalidateQueries({ queryKey: ["hotels"] });
+    },
+    onError: (e) => toast.error(getApiErrorMessage(e, "Gagal menyimpan hotel")),
+  });
+
   const hotelsList = hotels.data ?? [];
   const firstHotelId = hotelsList[0]?.id ?? "";
   const activeHotelId = hotelId || firstHotelId;
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Setiap hotel punya harga jual sendiri per barang jadi. Bon/faktur cukup pilih barang dan
-        jumlah — nominal mengambil dari master ini. Baris tanpa harga tampil kosong sampai Anda
-        simpan.
-      </p>
+    <div className="space-y-6">
+      <Card className="border-border bg-card shadow-sm">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0 pb-2">
+          <div>
+            <CardTitle className="text-lg">Master hotel</CardTitle>
+            <CardDescription>
+              Daftar hotel dipakai di penukaran faktur dan harga jual per barang jadi. Tambah hotel
+              baru di sini sebelum mengatur harga.
+            </CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-primary/30 bg-primary/5 hover:bg-primary/10"
+            onClick={() => setHotelDialogOpen(true)}
+          >
+            <Plus className="mr-2 size-4" />
+            Tambah hotel
+          </Button>
+        </CardHeader>
+        <CardContent className="px-0 pb-4 pt-0">
+          <div className="surface-table-wrap border-t border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nama hotel</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {hotelsList.map((h) => (
+                  <TableRow key={h.id}>
+                    <TableCell className="font-medium text-slate-800 dark:text-slate-100">
+                      {h.name}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {!hotelsList.length && (
+                  <TableRow>
+                    <TableCell className="h-16 text-center text-muted-foreground">
+                      {hotels.isLoading ? "Memuat…" : "Belum ada hotel — gunakan Tambah hotel."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={hotelDialogOpen} onOpenChange={setHotelDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hotel baru</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Nama akan muncul di daftar hotel dan bisa dipilih saat penukaran faktur.
+            </p>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="new-hotel-name">Nama hotel</Label>
+            <Input
+              id="new-hotel-name"
+              value={newHotelName}
+              onChange={(e) => setNewHotelName(e.target.value)}
+              placeholder="Contoh: Hotel Bahari"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newHotelName.trim() && !createHotel.isPending) {
+                  e.preventDefault();
+                  createHotel.mutate();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setHotelDialogOpen(false)}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              className="btn-gradient border-0"
+              disabled={!newHotelName.trim() || createHotel.isPending}
+              onClick={() => createHotel.mutate()}
+            >
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+          Harga jual per barang
+        </h3>
+      </div>
 
       <div className="surface-panel flex flex-col gap-3 lg:flex-row lg:items-end">
         <div className="grid flex-1 gap-3 sm:grid-cols-2">
@@ -323,9 +429,9 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
       </div>
 
       {!hotelsList.length ? (
-        <p className="rounded-lg border border-dashed border-violet-200/80 bg-violet-50/40 px-4 py-6 text-center text-sm text-muted-foreground dark:border-violet-500/30 dark:bg-violet-950/20">
-          Belum ada hotel. Tambahkan dari halaman <strong>Penukaran faktur</strong> (tombol Tambah
-          hotel).
+        <p className="rounded-lg border border-dashed border-primary/30 bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+          Tambah hotel di bagian <strong className="text-foreground">Master hotel</strong> di atas,
+          lalu pilih hotel untuk mengisi harga jual.
         </p>
       ) : (
         <HotelSellPricesGrid

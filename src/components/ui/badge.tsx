@@ -9,7 +9,8 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        default:
+          "border border-primary/20 bg-primary/12 text-primary [a]:hover:bg-primary/18",
         secondary:
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
         destructive:
@@ -17,11 +18,11 @@ const badgeVariants = cva(
         outline:
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         success:
-          "border border-emerald-500/30 bg-emerald-500/15 text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/20 dark:text-emerald-100 [a]:hover:bg-emerald-500/25",
+          "border border-success/35 bg-success/12 text-foreground dark:border-success/30 dark:bg-success/18 dark:text-foreground [a]:hover:bg-success/22",
         warning:
-          "border border-amber-500/35 bg-amber-500/15 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/20 dark:text-amber-100 [a]:hover:bg-amber-500/25",
+          "border border-destructive/35 bg-destructive/10 text-destructive dark:border-destructive/30 dark:bg-destructive/15 [a]:hover:bg-destructive/18",
         info:
-          "border border-sky-500/30 bg-sky-500/15 text-sky-900 dark:border-sky-500/25 dark:bg-sky-500/20 dark:text-sky-100 [a]:hover:bg-sky-500/25",
+          "border border-primary/30 bg-primary/10 text-primary dark:border-primary/25 dark:bg-primary/15 [a]:hover:bg-primary/18",
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",

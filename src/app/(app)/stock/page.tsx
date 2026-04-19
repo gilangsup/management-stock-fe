@@ -1,7 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { InventoryConsole } from "@/components/inventory/inventory-console";
-
-export default function StockPage() {
-  return <InventoryConsole />;
+export default function StockIndexPage() {
+  redirect("/stock/bahan-baku");
 }
