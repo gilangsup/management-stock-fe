@@ -6,7 +6,11 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { formatDate, formatIdr } from "@/lib/format";
-import type { SalesInvoiceDetail } from "@/types/sales";
+import {
+  type SalesInvoiceDetail,
+  salesLineProductName,
+  salesLineUnitPrice,
+} from "@/types/sales";
 
 export default function BonPenjualanPage() {
   const params = useParams();
@@ -85,9 +89,9 @@ export default function BonPenjualanPage() {
                 <td className="py-2">
                   <span className="font-mono text-xs text-muted-foreground">{l.itemCode}</span>
                   <br />
-                  {l.name}
+                  {salesLineProductName(l)}
                   <span className="block text-xs text-muted-foreground">
-                    {l.unit.name} @ {formatIdr(l.sellPrice)}
+                    {l.unit.name} @ {formatIdr(salesLineUnitPrice(l))}
                   </span>
                 </td>
                 <td className="py-2 text-right tabular-nums">{l.qty}</td>

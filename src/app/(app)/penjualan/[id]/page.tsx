@@ -20,7 +20,11 @@ import {
 import { api } from "@/lib/api";
 import { formatDate, formatIdr } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { SalesInvoiceDetail } from "@/types/sales";
+import {
+  type SalesInvoiceDetail,
+  salesLineProductName,
+  salesLineUnitPrice,
+} from "@/types/sales";
 
 export default function PenjualanDetailPage() {
   const params = useParams();
@@ -158,14 +162,14 @@ export default function PenjualanDetailPage() {
                 {(d.lines ?? []).map((line, i) => (
                   <TableRow key={i}>
                     <TableCell className="font-mono text-xs">{line.itemCode}</TableCell>
-                    <TableCell className="font-medium">{line.name}</TableCell>
+                    <TableCell className="font-medium">{salesLineProductName(line)}</TableCell>
                     <TableCell>
                       {line.unit.name}{" "}
                       <span className="text-xs text-muted-foreground">({line.unit.code})</span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{line.qty}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatIdr(line.sellPrice)}
+                      {formatIdr(salesLineUnitPrice(line))}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {formatIdr(line.lineTotal)}

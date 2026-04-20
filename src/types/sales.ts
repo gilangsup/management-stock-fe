@@ -12,12 +12,26 @@ export type SalesInvoiceListItem = {
 
 export type SalesInvoiceLine = {
   itemCode: string;
-  name: string;
+  /** API detail: `productName` */
+  productName?: string;
+  /** Alias lama / kompatibel */
+  name?: string;
   unit: { code: string; name: string };
-  sellPrice: string;
+  /** API detail: `unitPrice` */
+  unitPrice?: string;
+  /** Alias lama / preview */
+  sellPrice?: string;
   qty: string;
   lineTotal: string;
 };
+
+export function salesLineProductName(line: SalesInvoiceLine): string {
+  return line.productName ?? line.name ?? "";
+}
+
+export function salesLineUnitPrice(line: SalesInvoiceLine): string {
+  return line.unitPrice ?? line.sellPrice ?? "0";
+}
 
 export type SalesInvoiceDetail = {
   id: string;

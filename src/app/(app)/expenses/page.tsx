@@ -59,6 +59,16 @@ type ExpenseRow = {
 
 const RAW_MATERIAL_PICKER_LIMIT = 500;
 
+/** Kuantitas dan harga satuan keduanya terisi → total mengikuti perkalian (bukan input manual). */
+function isExpenseTotalFromQtyAndUnit(qty: string, unitPrice: string): boolean {
+  const tq = qty.trim();
+  const tu = unitPrice.trim();
+  if (tq === "" || tu === "") return false;
+  const q = Number(tq);
+  const u = Number(tu);
+  return Number.isFinite(q) && Number.isFinite(u);
+}
+
 export default function ExpensesPage() {
   const qc = useQueryClient();
   const anchor = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -129,10 +139,12 @@ export default function ExpensesPage() {
         unitPrice: Number(form.unitPrice),
       };
       if (form.notes.trim()) base.notes = form.notes.trim();
-      const tp = form.totalPrice.trim();
-      if (tp !== "") {
-        const n = Number(tp);
-        if (Number.isFinite(n)) base.totalPrice = n;
+      if (!isExpenseTotalFromQtyAndUnit(form.qty, form.unitPrice)) {
+        const tp = form.totalPrice.trim();
+        if (tp !== "") {
+          const n = Number(tp);
+          if (Number.isFinite(n)) base.totalPrice = n;
+        }
       }
       const { data } = await api.post("/expenses", base);
       return data;
@@ -166,12 +178,15 @@ export default function ExpensesPage() {
 
   const metaSum = list.data?.meta.summary;
 
+  /** Terisi otomatis dari qty × harga satuan (keduanya harus diisi, bukan string kosong). */
   const computedLineTotal = useMemo(() => {
-    const q = Number(form.qty);
-    const u = Number(form.unitPrice);
-    if (!Number.isFinite(q) || !Number.isFinite(u)) return null;
+    if (!isExpenseTotalFromQtyAndUnit(form.qty, form.unitPrice)) return null;
+    const q = Number(form.qty.trim());
+    const u = Number(form.unitPrice.trim());
     return q * u;
   }, [form.qty, form.unitPrice]);
+
+  const totalFromQtyAndUnit = computedLineTotal != null;
 
   const canSubmit =
     form.rawMaterialId &&
@@ -434,17 +449,26 @@ export default function ExpensesPage() {
               <Label>Total (opsional)</Label>
               <Input
                 inputMode="decimal"
-                value={form.totalPrice}
-                onChange={(e) => setForm((f) => ({ ...f, totalPrice: e.target.value }))}
-                placeholder={
-                  computedLineTotal != null ? String(Math.round(computedLineTotal)) : "qty × harga"
+                disabled={totalFromQtyAndUnit}
+                value={
+                  totalFromQtyAndUnit
+                    ? String(computedLineTotal)
+                    : form.totalPrice
                 }
+                onChange={(e) => setForm((f) => ({ ...f, totalPrice: e.target.value }))}
+                placeholder={totalFromQtyAndUnit ? undefined : "qty × harga"}
               />
-              {computedLineTotal != null ? (
+              {totalFromQtyAndUnit ? (
                 <p className="text-xs text-muted-foreground">
-                  Perkiraan: {formatIdr(String(computedLineTotal))}
+                  Mengikuti kuantitas × harga satuan ({formatIdr(String(computedLineTotal))}). Kosongkan
+                  salah satu isian di atas jika ingin mengisi total manual.
                 </p>
-              ) : null}
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Jika dikosongkan, server menghitung dari kuantitas × harga satuan setelah keduanya
+                  diisi.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Catatan (opsional)</Label>

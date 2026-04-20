@@ -25,10 +25,11 @@ import {
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatIdr } from "@/lib/format";
+import { labelForHotelValue } from "@/lib/select-labels";
 import type { HotelFinishedSellPriceRow } from "@/components/inventory/types";
 import type { SalesPreviewLine } from "@/types/sales";
 
-type Hotel = { id: string; name: string };
+type Hotel = { id: string | number; name: string };
 
 type DraftLine = {
   key: string;
@@ -163,7 +164,7 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Tambah faktur penjualan</DialogTitle>
         </DialogHeader>
@@ -173,18 +174,26 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
             <div className="space-y-2">
               <Label>Hotel</Label>
               <Select
-                value={hotelId || undefined}
+                value={hotelId ? String(hotelId) : undefined}
                 onValueChange={(v) => {
-                  setHotelId(v ?? "");
+                  setHotelId(v != null && v !== "" ? String(v) : "");
                   setLines([newLine()]);
                 }}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih hotel" />
+                <SelectTrigger className="w-full min-w-0">
+                  <SelectValue placeholder="Pilih hotel">
+                    {labelForHotelValue(
+                      (hotels.data ?? []).map((h) => ({
+                        id: String(h.id),
+                        name: h.name,
+                      })),
+                      hotelId,
+                    ) ?? undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(hotels.data ?? []).map((h) => (
-                    <SelectItem key={h.id} value={h.id}>
+                    <SelectItem key={String(h.id)} value={String(h.id)}>
                       {h.name}
                     </SelectItem>
                   ))}
@@ -244,13 +253,13 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
                     </Button>
                   ) : null}
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="space-y-1.5 sm:col-span-2">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
                     <Label className="text-xs">Barang jadi</Label>
                     <Select
-                      value={line.finishedProductId || undefined}
+                      value={line.finishedProductId ? String(line.finishedProductId) : undefined}
                       onValueChange={(v) => {
-                        const fp = v ?? "";
+                        const fp = v != null && v !== "" ? String(v) : "";
                         setLines((prev) =>
                           prev.map((l) =>
                             l.key === line.key
@@ -261,12 +270,27 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
                         if (fp && hotelId) void loadPreview(line.key, hotelId, fp);
                       }}
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih barang (ada harga)" />
+                      <SelectTrigger className="w-full min-w-0">
+                        <SelectValue placeholder="Pilih barang (ada harga)">
+                          {(() => {
+                            const id = line.finishedProductId;
+                            if (!id) return undefined;
+                            const row = (pricedProducts.data ?? []).find(
+                              (r) => String(r.finishedProductId) === String(id),
+                            );
+                            if (row) return `${row.itemCode} — ${row.name}`;
+                            if (line.preview)
+                              return `${line.preview.itemCode} — ${line.preview.name}`;
+                            return undefined;
+                          })()}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {(pricedProducts.data ?? []).map((r) => (
-                          <SelectItem key={r.finishedProductId} value={r.finishedProductId}>
+                          <SelectItem
+                            key={String(r.finishedProductId)}
+                            value={String(r.finishedProductId)}
+                          >
                             {r.itemCode} — {r.name}
                           </SelectItem>
                         ))}
@@ -294,7 +318,7 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
                         <span className="text-muted-foreground">Harga jual / unit</span>
                         <p className="font-mono tabular-nums">{formatIdr(line.preview.sellPrice)}</p>
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 lg:col-span-1">
                         <Label className="text-xs">Qty</Label>
                         <Input
                           inputMode="decimal"
@@ -310,7 +334,7 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
                           }
                         />
                       </div>
-                      <div className="flex items-end text-sm">
+                      <div className="flex items-end text-sm lg:col-span-2">
                         <div>
                           <span className="text-muted-foreground">Subtotal baris</span>
                           <p className="font-semibold tabular-nums">
