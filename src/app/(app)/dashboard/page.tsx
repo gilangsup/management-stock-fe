@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Package, Receipt, ShoppingCart, Sparkles, Wallet } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { api } from "@/lib/api";
@@ -53,7 +54,7 @@ export default function DashboardPage() {
 
   return (
     <AppShell searchPlaceholder="Cari operasi, aset, atau batch…">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className={pageStackWide}>
         <PageHeader
           title="Dasbor"
           description="Ringkasan operasional harian dalam satu layar."

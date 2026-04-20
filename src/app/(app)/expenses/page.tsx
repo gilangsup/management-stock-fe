@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Plus, ShoppingCart } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { DateField } from "@/components/forms/date-field";
 import { Button } from "@/components/ui/button";
@@ -200,7 +201,7 @@ export default function ExpensesPage() {
 
   return (
     <AppShell searchPlaceholder="Cari pembelian…">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className={pageStackWide}>
         <PageHeader
           title="Belanja harian"
           description="Catat pembelian bahan baku (qty, harga per satuan, total). Ringkasan harian, mingguan, dan bulanan."

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { Plus, Printer, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { DateField } from "@/components/forms/date-field";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -102,7 +103,7 @@ export default function InvoiceExchangePage() {
 
   return (
     <AppShell searchPlaceholder="Cari faktur…">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className={pageStackWide}>
         <PageHeader
           title="Penukaran faktur"
           description="Penukaran faktur per hotel — cetak kwitansi dari total baris."

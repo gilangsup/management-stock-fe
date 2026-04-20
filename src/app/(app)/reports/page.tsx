@@ -2,13 +2,14 @@
 
 import { BarChart3, BookOpen, LineChart } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
+import { pageStackNarrow } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function ReportsPage() {
   return (
     <AppShell searchPlaceholder="Cari laporan…">
-      <div className="mx-auto max-w-4xl space-y-8">
+      <div className={pageStackNarrow}>
         <PageHeader
           title="Laporan"
           description="Modul laporan lanjutan dapat ditambahkan (ekspor agregat, grafik, dan lainnya)."

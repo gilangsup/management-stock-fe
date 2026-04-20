@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   description: "Stok, pengeluaran, penukaran faktur, dan piutang",
 };
 
+export const viewport = {
+  width: "device-width" as const,
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

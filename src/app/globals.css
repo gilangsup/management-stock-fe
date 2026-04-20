@@ -151,7 +151,7 @@
     @apply rounded-2xl border border-border bg-card p-4 shadow-sm shadow-foreground/5 backdrop-blur-sm dark:bg-card/90 dark:shadow-none;
   }
   .surface-table-wrap {
-    @apply overflow-hidden rounded-2xl border border-border bg-card shadow-sm shadow-foreground/5 backdrop-blur-sm dark:bg-card/90 dark:shadow-none;
+    @apply overflow-x-auto rounded-2xl border border-border bg-card shadow-sm shadow-foreground/5 backdrop-blur-sm dark:bg-card/90 dark:shadow-none;
   }
   .btn-gradient {
     @apply bg-primary text-primary-foreground shadow-sm shadow-foreground/10 transition-colors hover:bg-primary/90 hover:shadow-sm;
