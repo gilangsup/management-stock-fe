@@ -1,69 +1,121 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { RawMaterialRow } from "@/components/inventory/types";
+import type { ApiListResponse, RawMaterialRow } from "@/components/inventory/types";
+
+const PAGE_LIMIT = 50;
+
+type SearchScope = "__all__" | "name" | "itemCode";
 
 type Props = {
-  items: RawMaterialRow[];
   value: string;
   onChange: (rawMaterialId: string) => void;
   disabled?: boolean;
-  loading?: boolean;
   placeholder?: string;
   id?: string;
 };
 
 export function RawMaterialCombobox({
-  items,
   value,
   onChange,
   disabled,
-  loading,
   placeholder = "Pilih bahan baku",
   id,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [searchScope, setSearchScope] = useState<SearchScope>("__all__");
+  const [picked, setPicked] = useState<RawMaterialRow | null>(null);
 
-  const selected = useMemo(
-    () => items.find((x) => String(x.id) === String(value)),
-    [items, value],
-  );
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
 
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return items;
-    return items.filter((r) => {
-      const name = r.name.toLowerCase();
-      const code = (r.itemCode ?? "").toLowerCase();
-      const u = `${r.unit.name} ${r.unit.code}`.toLowerCase();
-      return name.includes(s) || code.includes(s) || u.includes(s);
-    });
-  }, [items, q]);
+  useEffect(() => {
+    if (!value) setPicked(null);
+  }, [value]);
+
+  const listQuery = useQuery({
+    queryKey: ["raw-materials", "combobox-search", debouncedQ, searchScope],
+    queryFn: async () => {
+      const params: Record<string, string | number> = {
+        page: 1,
+        limit: PAGE_LIMIT,
+      };
+      if (debouncedQ) {
+        params.search = debouncedQ;
+        if (searchScope === "name") params.searchBy = "name";
+        if (searchScope === "itemCode") params.searchBy = "itemCode";
+      }
+      const { data } = await api.get<ApiListResponse<RawMaterialRow>>("/raw-materials", {
+        params,
+      });
+      return data;
+    },
+    enabled: open,
+    staleTime: 15_000,
+  });
+
+  const apiRows = listQuery.data?.data ?? [];
+  const metaTotal = listQuery.data?.meta.total;
+
+  const rows = useMemo(() => {
+    const out = [...apiRows];
+    if (picked && value && String(picked.id) === String(value)) {
+      if (!out.some((r) => String(r.id) === String(value))) {
+        out.unshift(picked);
+      }
+    }
+    return out;
+  }, [apiRows, picked, value]);
+
+  const selected = useMemo(() => {
+    if (!value) return null;
+    if (picked && String(picked.id) === String(value)) return picked;
+    return apiRows.find((x) => String(x.id) === String(value)) ?? null;
+  }, [value, picked, apiRows]);
 
   return (
     <Popover
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setQ("");
+        if (next) {
+          setQ("");
+          setDebouncedQ("");
+          setSearchScope("__all__");
+        } else {
+          setQ("");
+          setDebouncedQ("");
+        }
       }}
     >
       <PopoverTrigger
         id={id}
         type="button"
-        disabled={disabled || loading}
+        disabled={disabled}
         className={cn(
           "border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
         <span className="line-clamp-1">
-          {loading ? (
+          {open && listQuery.isFetching && !listQuery.data ? (
             "Memuat…"
           ) : selected ? (
             <>
@@ -72,6 +124,8 @@ export function RawMaterialCombobox({
                 ({selected.itemCode ?? "—"}) · {selected.unit.name}
               </span>
             </>
+          ) : value ? (
+            <span className="text-muted-foreground">Bahan baku dipilih · ketuk untuk mengubah</span>
           ) : (
             <span className="text-muted-foreground">{placeholder}</span>
           )}
@@ -83,52 +137,99 @@ export function RawMaterialCombobox({
         className="flex w-[min(28rem,calc(100vw-2rem))] flex-col gap-2 p-2"
         sideOffset={4}
       >
-        <Input
-          placeholder="Cari nama atau kode…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="h-9"
-          autoFocus
-        />
-        <ScrollArea className="h-[min(280px,50vh)]">
-          <div className="flex flex-col gap-0.5 pr-2">
-            {filtered.length === 0 ? (
-              <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                Tidak ada bahan baku yang cocok.
-              </p>
-            ) : (
-              filtered.map((r) => {
-                const idStr = String(r.id);
-                const active = idStr === String(value);
-                return (
-                  <button
-                    key={idStr}
-                    type="button"
-                    className={cn(
-                      "flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors",
-                      active ? "bg-accent text-accent-foreground" : "hover:bg-muted/80",
-                    )}
-                    onClick={() => {
-                      onChange(idStr);
-                      setOpen(false);
-                      setQ("");
-                    }}
-                  >
-                    <Check
-                      className={cn("mt-0.5 size-4 shrink-0", active ? "opacity-100" : "opacity-0")}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-medium leading-tight">{r.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {r.itemCode ?? "—"} · {r.unit.name} ({r.unit.code})
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            placeholder="Cari nama atau kode…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="h-9 flex-1"
+            autoComplete="off"
+            autoFocus
+          />
+          <Select
+            value={searchScope}
+            onValueChange={(v) => setSearchScope(v as SearchScope)}
+          >
+            <SelectTrigger
+              className="h-9 w-full shrink-0 sm:w-[11rem]"
+              aria-label="Ruang pencarian"
+            >
+              <SelectValue>
+                {searchScope === "name"
+                  ? "Hanya nama"
+                  : searchScope === "itemCode"
+                    ? "Hanya kode"
+                    : "Nama atau kode"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Nama atau kode</SelectItem>
+              <SelectItem value="name">Hanya nama</SelectItem>
+              <SelectItem value="itemCode">Hanya kode</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Pencarian lewat server. Kosongkan kotak untuk melihat halaman pertama.
+        </p>
+        {listQuery.isError ? (
+          <p className="px-2 py-4 text-center text-xs text-destructive">Gagal memuat bahan baku.</p>
+        ) : (
+          <ScrollArea className="h-[min(280px,50vh)]">
+            <div className="flex flex-col gap-0.5 pr-2">
+              {listQuery.isFetching && !listQuery.data ? (
+                <p className="px-2 py-6 text-center text-xs text-muted-foreground">Memuat…</p>
+              ) : rows.length === 0 ? (
+                <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                  {debouncedQ
+                    ? "Tidak ada bahan baku yang cocok."
+                    : "Belum ada bahan baku. Tambahkan di Inventori → Bahan baku."}
+                </p>
+              ) : (
+                rows.map((r) => {
+                  const idStr = String(r.id);
+                  const active = idStr === String(value);
+                  return (
+                    <button
+                      key={idStr}
+                      type="button"
+                      className={cn(
+                        "flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors",
+                        active ? "bg-accent text-accent-foreground" : "hover:bg-muted/80",
+                      )}
+                      onClick={() => {
+                        onChange(idStr);
+                        setPicked(r);
+                        setOpen(false);
+                        setQ("");
+                        setDebouncedQ("");
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mt-0.5 size-4 shrink-0",
+                          active ? "opacity-100" : "opacity-0",
+                        )}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium leading-tight">{r.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {r.itemCode ?? "—"} · {r.unit.name} ({r.unit.code})
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </ScrollArea>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </ScrollArea>
+        )}
+        {metaTotal != null && apiRows.length > 0 && metaTotal > apiRows.length ? (
+          <p className="text-[11px] text-muted-foreground">
+            Menampilkan {apiRows.length} dari {metaTotal}. Persempit kata kunci atau pilih &quot;Hanya
+            nama/kode&quot;.
+          </p>
+        ) : null}
       </PopoverContent>
     </Popover>
   );

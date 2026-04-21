@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -18,11 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { formatIdr } from "@/lib/format";
-import type { ApiListResponse, RawMaterialRow } from "@/components/inventory/types";
 import type { ExpenseBatchSuccessResponse } from "@/types/expenses";
 import { RawMaterialCombobox } from "./raw-material-combobox";
-
-const RAW_MATERIAL_PICKER_LIMIT = 500;
 
 function isExpenseTotalFromQtyAndUnit(qty: string, unitPrice: string): boolean {
   const tq = qty.trim();
@@ -66,20 +63,6 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
   const [expenseDate, setExpenseDate] = useState(anchorDate);
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>(() => [newLine()]);
-
-  const rawMaterialsPicker = useQuery({
-    queryKey: ["raw-materials", "picker"],
-    queryFn: async () => {
-      const { data } = await api.get<ApiListResponse<RawMaterialRow>>("/raw-materials", {
-        params: { page: 1, limit: RAW_MATERIAL_PICKER_LIMIT },
-      });
-      return data;
-    },
-    enabled: open,
-    staleTime: 30_000,
-  });
-
-  const rmList = rawMaterialsPicker.data?.data ?? [];
 
   const grandPreview = useMemo(() => {
     let sum = 0;
@@ -288,7 +271,6 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                   <div className="space-y-1.5">
                     <Label className="text-xs">Bahan baku</Label>
                     <RawMaterialCombobox
-                      items={rmList}
                       value={line.rawMaterialId}
                       onChange={(id) =>
                         setLines((prev) =>
@@ -297,8 +279,7 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                           ),
                         )
                       }
-                      loading={rawMaterialsPicker.isLoading}
-                      disabled={rawMaterialsPicker.isLoading}
+                      disabled={createBatch.isPending}
                     />
                   </div>
 
@@ -381,11 +362,6 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
               );
             })}
 
-            {!rawMaterialsPicker.isLoading && rmList.length === 0 ? (
-              <p className="text-xs text-destructive">
-                Belum ada bahan baku. Tambahkan di Inventori → Bahan baku.
-              </p>
-            ) : null}
           </div>
 
           <div className="space-y-2">
