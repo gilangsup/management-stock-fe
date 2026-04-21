@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
-import { formatIdr } from "@/lib/format";
+import { formatIdr, formatIntegerQty } from "@/lib/format";
 import { labelForSnackCategoryValue } from "@/lib/select-labels";
 import type { ApiListResponse, FinishedProductRow, SnackCategoryRow } from "./types";
 
@@ -247,6 +247,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
               <TableHead>Kode</TableHead>
               <TableHead>Nama</TableHead>
               <TableHead>Kategori</TableHead>
+              <TableHead className="text-right">Stok</TableHead>
               <TableHead className="text-right">Harga pokok</TableHead>
               <TableHead className="w-[140px]" />
             </TableRow>
@@ -265,6 +266,9 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
                   <div className="text-xs text-muted-foreground">
                     Prefix {row.snackCategory.codePrefix}
                   </div>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatIntegerQty(row.stockQuantity)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{formatIdr(row.costPrice)}</TableCell>
                 <TableCell>
@@ -295,7 +299,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
             ))}
             {!list.data?.data?.length && (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                   {list.isLoading ? "Memuat…" : "Belum ada barang jadi."}
                 </TableCell>
               </TableRow>

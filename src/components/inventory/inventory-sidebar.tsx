@@ -1,13 +1,35 @@
 "use client";
 
+import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Hotel, Layers, Ruler, Tags, Upload, Wheat } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  History,
+  Hotel,
+  Layers,
+  Ruler,
+  Tags,
+  Upload,
+  Wheat,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const inventori = [
+type InventoriLink = {
+  href: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  /** Jika true, hanya cocok path persis (untuk memisahkan /stock/barang-jadi dari sub-rute). */
+  exact?: boolean;
+};
+
+const inventori: InventoriLink[] = [
   { href: "/stock/bahan-baku", label: "Bahan baku", icon: Wheat },
-  { href: "/stock/barang-jadi", label: "Barang jadi", icon: Tags },
+  { href: "/stock/barang-jadi", label: "Barang jadi", icon: Tags, exact: true },
+  { href: "/stock/barang-jadi/stock-masuk", label: "Stock barang masuk", icon: ArrowDownToLine },
+  { href: "/stock/barang-jadi/stock-keluar", label: "Stock barang keluar", icon: ArrowUpFromLine },
+  { href: "/stock/barang-jadi/riwayat-stok", label: "Riwayat stok barang jadi", icon: History },
   { href: "/stock/harga-hotel", label: "Harga hotel", icon: Hotel },
   { href: "/stock/bulk-master", label: "Bulk master", icon: Upload },
 ];
@@ -31,7 +53,9 @@ export function InventorySidebar() {
         </p>
         <ul className="space-y-1">
           {inventori.map((item) => {
-            const active = pathname === item.href;
+            const active = item.exact
+              ? pathname === item.href
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return (
               <li key={item.href}>
