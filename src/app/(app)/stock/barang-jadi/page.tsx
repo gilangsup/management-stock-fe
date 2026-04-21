@@ -14,7 +14,7 @@ export default function BarangJadiPage() {
     <>
       <PageHeader
         title="Barang jadi"
-        description="Harga pokok global per SKU; kategori menentukan prefix kode otomatis. Stok di kolom Stok diubah lewat menu Stock barang masuk / keluar."
+        description="Harga pokok global per SKU; kategori menentukan prefix kode otomatis. Stok di kolom Stok diubah lewat menu utama Stock barang jadi (bukan di halaman Master Data ini)."
       />
       <FinishedProductsTab
         isAdmin={!!isAdmin}

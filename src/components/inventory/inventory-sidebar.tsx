@@ -3,17 +3,7 @@
 import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  History,
-  Hotel,
-  Layers,
-  Ruler,
-  Tags,
-  Upload,
-  Wheat,
-} from "lucide-react";
+import { Hotel, Layers, Ruler, Tags, Upload, Wheat } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SidebarLink = {
@@ -29,12 +19,6 @@ const masterInventori: SidebarLink[] = [
   { href: "/stock/barang-jadi", label: "Barang jadi", icon: Tags, exact: true },
   { href: "/stock/harga-hotel", label: "Harga hotel", icon: Hotel },
   { href: "/stock/bulk-master", label: "Bulk master", icon: Upload },
-];
-
-const stokBarangJadi: SidebarLink[] = [
-  { href: "/stock/barang-jadi/stock-masuk", label: "Stock barang masuk", icon: ArrowDownToLine },
-  { href: "/stock/barang-jadi/stock-keluar", label: "Stock barang keluar", icon: ArrowUpFromLine },
-  { href: "/stock/barang-jadi/riwayat-stok", label: "Riwayat stok barang jadi", icon: History },
 ];
 
 const kategori: SidebarLink[] = [
@@ -86,13 +70,6 @@ export function InventorySidebar() {
           Master Inventori
         </p>
         <SidebarLinkList items={masterInventori} />
-      </div>
-
-      <div className="border-t border-border pt-4">
-        <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-primary/90">
-          Stok barang jadi
-        </p>
-        <SidebarLinkList items={stokBarangJadi} />
       </div>
 
       <div className="border-t border-border pt-4">
