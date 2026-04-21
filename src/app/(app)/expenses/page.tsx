@@ -2,9 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Plus, ShoppingCart } from "lucide-react";
+import { ChevronDown, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DateField } from "@/components/forms/date-field";
@@ -29,15 +29,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { buttonVariants } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api-error";
+import { getStoredUser } from "@/lib/auth-storage";
 import { formatDate, formatDecimalQty, formatIdr } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { ApiListResponse, RawMaterialRow } from "@/components/inventory/types";
 
 type Range = "today" | "week" | "month";
@@ -57,14 +56,21 @@ type ExpenseRow = {
   };
 };
 
-const RAW_MATERIAL_PICKER_LIMIT = 500;
+/** Hasil pencarian dari server (`search`); bukan memuat semua lalu filter di klien. */
+const RAW_MATERIAL_PICKER_PAGE_LIMIT = 50;
 
 export default function ExpensesPage() {
   const qc = useQueryClient();
+  const isAdmin = useMemo(() => getStoredUser()?.role === "admin", []);
   const anchor = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [range, setRange] = useState<Range>("today");
   const [date, setDate] = useState(anchor);
   const [open, setOpen] = useState(false);
+  const [rmPickerOpen, setRmPickerOpen] = useState(false);
+  const [rmSearchInput, setRmSearchInput] = useState("");
+  const [debouncedRmSearch, setDebouncedRmSearch] = useState("");
+  const [pickedRm, setPickedRm] = useState<RawMaterialRow | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<ExpenseRow | null>(null);
   const [form, setForm] = useState({
     rawMaterialId: "",
     qty: "1",
@@ -74,11 +80,20 @@ export default function ExpensesPage() {
     expenseDate: anchor,
   });
 
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedRmSearch(rmSearchInput), 250);
+    return () => window.clearTimeout(t);
+  }, [rmSearchInput]);
+
   const rawMaterialsPicker = useQuery({
-    queryKey: ["raw-materials", "picker"],
+    queryKey: ["raw-materials", "picker", debouncedRmSearch],
     queryFn: async () => {
       const { data } = await api.get<ApiListResponse<RawMaterialRow>>("/raw-materials", {
-        params: { page: 1, limit: RAW_MATERIAL_PICKER_LIMIT },
+        params: {
+          page: 1,
+          limit: RAW_MATERIAL_PICKER_PAGE_LIMIT,
+          ...(debouncedRmSearch.trim() ? { search: debouncedRmSearch.trim() } : {}),
+        },
       });
       return data;
     },
@@ -164,6 +179,20 @@ export default function ExpensesPage() {
     },
   });
 
+  const deleteExpense = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/expenses/${id}`);
+    },
+    onSuccess: () => {
+      toast.success("Pembelian dihapus");
+      setExpenseToDelete(null);
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["expenses-summary"] });
+      qc.invalidateQueries({ queryKey: ["expense-summary-dash"] });
+    },
+    onError: (e: unknown) => toast.error(getApiErrorMessage(e, "Gagal menghapus")),
+  });
+
   const metaSum = list.data?.meta.summary;
 
   const computedLineTotal = useMemo(() => {
@@ -181,7 +210,23 @@ export default function ExpensesPage() {
     !Number.isNaN(Number(form.unitPrice));
 
   const rmList = rawMaterialsPicker.data?.data ?? [];
-  const selectedRm = rmList.find((r) => r.id === form.rawMaterialId);
+  const rmMetaTotal = rawMaterialsPicker.data?.meta.total;
+  const selectedRm =
+    pickedRm && pickedRm.id === form.rawMaterialId
+      ? pickedRm
+      : (rmList.find((r) => r.id === form.rawMaterialId) ?? null);
+
+  const resetRmPickerUi = () => {
+    setRmPickerOpen(false);
+    setRmSearchInput("");
+    setDebouncedRmSearch("");
+    setPickedRm(null);
+  };
+
+  const rawMaterialTriggerLabel =
+    selectedRm != null
+      ? `${selectedRm.name} (${selectedRm.itemCode ?? "—"})`
+      : null;
 
   return (
     <AppShell searchPlaceholder="Cari pembelian…">
@@ -196,6 +241,7 @@ export default function ExpensesPage() {
             className="btn-gradient border-0"
             onClick={() => {
               setForm((f) => ({ ...f, expenseDate: date }));
+              resetRmPickerUi();
               setOpen(true);
             }}
           >
@@ -287,6 +333,7 @@ export default function ExpensesPage() {
                 <TableHead className="text-right">Harga / satuan</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Catatan</TableHead>
+                {isAdmin ? <TableHead className="w-14 text-right">Aksi</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -316,11 +363,28 @@ export default function ExpensesPage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
+                  {isAdmin ? (
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                        onClick={() => setExpenseToDelete(row)}
+                        aria-label="Hapus pembelian"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
               {!list.data?.data?.length && (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={isAdmin ? 7 : 6}
+                    className="h-24 text-center text-muted-foreground"
+                  >
                     Belum ada pembelian di periode ini.
                   </TableCell>
                 </TableRow>
@@ -347,6 +411,7 @@ export default function ExpensesPage() {
         onOpenChange={(v) => {
           setOpen(v);
           if (!v) {
+            resetRmPickerUi();
             setForm({
               rawMaterialId: "",
               qty: "1",
@@ -376,35 +441,95 @@ export default function ExpensesPage() {
             </div>
             <div className="space-y-2">
               <Label>Bahan baku</Label>
-              {rawMaterialsPicker.isLoading ? (
-                <p className="text-xs text-muted-foreground">Memuat daftar…</p>
-              ) : null}
-              {!rawMaterialsPicker.isLoading && rmList.length === 0 ? (
-                <p className="text-xs text-destructive">
-                  Belum ada bahan baku. Tambahkan di Inventori → Bahan baku.
-                </p>
-              ) : null}
-              <Select
-                value={form.rawMaterialId || undefined}
-                onValueChange={(v) => setForm((f) => ({ ...f, rawMaterialId: v ?? "" }))}
+              <p className="text-xs text-muted-foreground">
+                Ketik nama atau kode — pencarian lewat server (tidak terbatas 500 baris pertama).
+              </p>
+              <Popover
+                open={rmPickerOpen}
+                onOpenChange={(next) => {
+                  setRmPickerOpen(next);
+                  if (!next) {
+                    setRmSearchInput("");
+                    setDebouncedRmSearch("");
+                  }
+                }}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih bahan baku">
-                    {(val) => {
-                      const r = rmList.find((x) => x.id === val);
-                      if (!r) return undefined;
-                      return `${r.name} (${r.itemCode ?? "—"})`;
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {rmList.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name} ({r.itemCode ?? "—"}) · {r.unit.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <PopoverTrigger
+                  type="button"
+                  className={cn(
+                    buttonVariants({ variant: "outline" }),
+                    "h-10 w-full justify-between font-normal",
+                    !rawMaterialTriggerLabel && "text-muted-foreground",
+                  )}
+                >
+                  <span className="truncate text-left">
+                    {rawMaterialTriggerLabel ?? "Pilih bahan baku"}
+                  </span>
+                  <ChevronDown className="ml-2 size-4 shrink-0 opacity-50" />
+                </PopoverTrigger>
+                <PopoverContent className="w-[min(100vw-2rem,28rem)] p-0" align="start">
+                  <div className="border-b border-border p-2">
+                    <Input
+                      placeholder="Cari nama / kode…"
+                      value={rmSearchInput}
+                      onChange={(e) => setRmSearchInput(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                  {rawMaterialsPicker.isFetching ? (
+                    <p className="p-3 text-xs text-muted-foreground">Memuat…</p>
+                  ) : null}
+                  {!rawMaterialsPicker.isFetching &&
+                  rawMaterialsPicker.isSuccess &&
+                  rmList.length === 0 ? (
+                    <p className="p-3 text-xs text-muted-foreground">
+                      {debouncedRmSearch.trim()
+                        ? "Tidak ada bahan baku yang cocok."
+                        : "Belum ada bahan baku. Tambahkan di Inventori → Bahan baku."}
+                    </p>
+                  ) : null}
+                  {!rawMaterialsPicker.isFetching && rmList.length > 0 ? (
+                    <>
+                      <ScrollArea className="h-[min(40vh,280px)]">
+                        <ul className="p-1">
+                          {rmList.map((r) => (
+                            <li key={r.id}>
+                              <button
+                                type="button"
+                                className={cn(
+                                  "hover:bg-muted focus-visible:bg-muted flex w-full flex-col rounded-md px-2 py-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                                  form.rawMaterialId === r.id && "bg-muted",
+                                )}
+                                onClick={() => {
+                                  setForm((f) => ({ ...f, rawMaterialId: r.id }));
+                                  setPickedRm(r);
+                                  setRmPickerOpen(false);
+                                  setRmSearchInput("");
+                                  setDebouncedRmSearch("");
+                                }}
+                              >
+                                <span className="font-medium">
+                                  {r.name}{" "}
+                                  <span className="font-mono text-xs text-muted-foreground">
+                                    ({r.itemCode ?? "—"})
+                                  </span>
+                                </span>
+                                <span className="text-xs text-muted-foreground">{r.unit.name}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </ScrollArea>
+                      {rmMetaTotal != null && rmMetaTotal > rmList.length ? (
+                        <p className="border-t border-border px-2 py-1.5 text-[0.7rem] text-muted-foreground">
+                          Menampilkan {rmList.length} dari {rmMetaTotal}. Persempit kata kunci untuk
+                          menemukan barang.
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
+                </PopoverContent>
+              </Popover>
               {selectedRm ? (
                 <p className="text-xs text-muted-foreground">
                   Satuan master: <strong>{selectedRm.unit.name}</strong> ({selectedRm.unit.code})
@@ -468,6 +593,35 @@ export default function ExpensesPage() {
               onClick={() => create.mutate()}
             >
               Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!expenseToDelete} onOpenChange={(o) => !o && setExpenseToDelete(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Hapus pembelian?</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              {expenseToDelete ? (
+                <>
+                  {formatDate(expenseToDelete.expenseDate)} · {expenseToDelete.rawMaterial.name} ·{" "}
+                  {formatIdr(expenseToDelete.totalPrice)} akan dihapus permanen.
+                </>
+              ) : null}
+            </p>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setExpenseToDelete(null)}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteExpense.isPending}
+              onClick={() => expenseToDelete && deleteExpense.mutate(expenseToDelete.id)}
+            >
+              Hapus
             </Button>
           </DialogFooter>
         </DialogContent>
