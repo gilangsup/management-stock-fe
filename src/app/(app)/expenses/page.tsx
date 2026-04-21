@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { Pencil, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -28,6 +28,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RawMaterialCombobox } from "@/components/expenses/raw-material-combobox";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { getStoredUser } from "@/lib/auth-storage";
@@ -58,6 +61,15 @@ export default function ExpensesPage() {
   const [date, setDate] = useState(anchor);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<ExpenseRow | null>(null);
+  const [expenseToEdit, setExpenseToEdit] = useState<ExpenseRow | null>(null);
+  const [editForm, setEditForm] = useState({
+    expenseDate: "",
+    rawMaterialId: "",
+    qty: "",
+    unitPrice: "",
+    totalPrice: "",
+    notes: "",
+  });
 
   const summary = useQuery({
     queryKey: ["expenses-summary", range, date],
@@ -93,6 +105,92 @@ export default function ExpensesPage() {
     },
   });
 
+  useEffect(() => {
+    if (!expenseToEdit) return;
+    const d = expenseToEdit.expenseDate.slice(0, 10);
+    setEditForm({
+      expenseDate: d,
+      rawMaterialId: expenseToEdit.rawMaterial.id,
+      qty: String(expenseToEdit.qty),
+      unitPrice: String(expenseToEdit.unitPrice),
+      totalPrice: String(expenseToEdit.totalPrice),
+      notes: expenseToEdit.notes ?? "",
+    });
+  }, [expenseToEdit]);
+
+  function buildExpensePatchBody(original: ExpenseRow): Record<string, unknown> | null {
+    const body: Record<string, unknown> = {};
+    const origDate = original.expenseDate.slice(0, 10);
+    if (editForm.expenseDate !== origDate) body.expenseDate = editForm.expenseDate;
+    if (editForm.rawMaterialId !== original.rawMaterial.id) {
+      body.rawMaterialId = editForm.rawMaterialId;
+    }
+
+    const qtyNum = Number(editForm.qty);
+    const unitNum = Number(editForm.unitPrice);
+    const origQtyNum = Number(original.qty);
+    const origUnitNum = Number(original.unitPrice);
+    const qtyChanged =
+      editForm.qty.trim() !== "" && Number.isFinite(qtyNum) && qtyNum !== origQtyNum;
+    const unitChanged =
+      editForm.unitPrice.trim() !== "" &&
+      Number.isFinite(unitNum) &&
+      unitNum !== origUnitNum;
+    if (qtyChanged) body.qty = qtyNum;
+    if (unitChanged) body.unitPrice = unitNum;
+
+    const tpTrim = editForm.totalPrice.trim();
+    const origTpNum = Number(original.totalPrice);
+    const tpProvided = tpTrim !== "" && Number.isFinite(Number(tpTrim));
+    const tpNum = tpProvided ? Number(tpTrim) : NaN;
+
+    if (qtyChanged || unitChanged) {
+      if (tpProvided && Number.isFinite(tpNum) && tpNum !== origTpNum) {
+        body.totalPrice = tpNum;
+      }
+    } else if (tpProvided && Number.isFinite(tpNum) && tpNum !== origTpNum) {
+      body.totalPrice = tpNum;
+    }
+
+    const n = editForm.notes.trim();
+    const origN = (original.notes ?? "").trim();
+    if (n === "" && origN !== "") {
+      body.notes = null;
+    } else if (n !== origN) {
+      body.notes = n === "" ? null : n;
+    }
+
+    if (Object.keys(body).length === 0) return null;
+    return body;
+  }
+
+  const patchExpense = useMutation({
+    mutationFn: async () => {
+      if (!expenseToEdit) return;
+      const body = buildExpensePatchBody(expenseToEdit);
+      if (!body) throw new Error("NO_CHANGES");
+      const { data } = await api.patch<{ success: boolean; data: ExpenseRow }>(
+        `/expenses/${expenseToEdit.id}`,
+        body,
+      );
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Pembelian diperbarui");
+      setExpenseToEdit(null);
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["expenses-summary"] });
+      qc.invalidateQueries({ queryKey: ["expense-summary-dash"] });
+    },
+    onError: (e: unknown) => {
+      if (e instanceof Error && e.message === "NO_CHANGES") {
+        toast.error("Tidak ada perubahan untuk disimpan.");
+        return;
+      }
+      toast.error(getApiErrorMessage(e, "Gagal memperbarui pembelian"));
+    },
+  });
+
   const deleteExpense = useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`/expenses/${id}`);
@@ -108,6 +206,15 @@ export default function ExpensesPage() {
   });
 
   const metaSum = list.data?.meta.summary;
+
+  const canSubmitEdit =
+    expenseToEdit &&
+    editForm.rawMaterialId &&
+    editForm.expenseDate &&
+    Number(editForm.qty) > 0 &&
+    !Number.isNaN(Number(editForm.qty)) &&
+    Number(editForm.unitPrice) >= 0 &&
+    !Number.isNaN(Number(editForm.unitPrice));
 
   return (
     <AppShell searchPlaceholder="Cari pembelian…">
@@ -216,7 +323,7 @@ export default function ExpensesPage() {
                 <TableHead className="text-right">Harga / satuan</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead>Catatan</TableHead>
-                {isAdmin ? <TableHead className="w-14 text-right">Aksi</TableHead> : null}
+                <TableHead className="w-[100px] text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -246,28 +353,36 @@ export default function ExpensesPage() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  {isAdmin ? (
-                    <TableCell className="text-right">
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                        onClick={() => setExpenseToDelete(row)}
-                        aria-label="Hapus pembelian"
+                        onClick={() => setExpenseToEdit(row)}
+                        aria-label="Ubah pembelian"
                       >
-                        <Trash2 className="size-3.5" />
+                        <Pencil className="size-3.5" />
                       </Button>
-                    </TableCell>
-                  ) : null}
+                      {isAdmin ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          onClick={() => setExpenseToDelete(row)}
+                          aria-label="Hapus pembelian"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
               {!list.data?.data?.length && (
                 <TableRow>
-                  <TableCell
-                    colSpan={isAdmin ? 7 : 6}
-                    className="h-24 text-center text-muted-foreground"
-                  >
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                     Belum ada pembelian di periode ini.
                   </TableCell>
                 </TableRow>
@@ -288,6 +403,95 @@ export default function ExpensesPage() {
           </div>
         </div>
       </div>
+
+      <Dialog open={!!expenseToEdit} onOpenChange={(o) => !o && setExpenseToEdit(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ubah pembelian</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Hanya field yang berubah yang dikirim ke server. Mengubah qty atau harga satuan tanpa
+              mengisi total akan membuat total dihitung ulang (qty × harga). Kosongkan catatan lalu
+              simpan untuk menghapus catatan.
+            </p>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label>Tanggal</Label>
+              <DateField
+                value={editForm.expenseDate}
+                onChange={(v) => setEditForm((f) => ({ ...f, expenseDate: v }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Bahan baku</Label>
+              <RawMaterialCombobox
+                key={expenseToEdit?.id ?? "new"}
+                value={editForm.rawMaterialId}
+                onChange={(id) => setEditForm((f) => ({ ...f, rawMaterialId: id }))}
+                disabled={patchExpense.isPending}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Kuantitas</Label>
+                <Input
+                  inputMode="decimal"
+                  value={editForm.qty}
+                  onChange={(e) => setEditForm((f) => ({ ...f, qty: e.target.value }))}
+                  disabled={patchExpense.isPending}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Harga / satuan (Rp)</Label>
+                <Input
+                  inputMode="decimal"
+                  value={editForm.unitPrice}
+                  onChange={(e) => setEditForm((f) => ({ ...f, unitPrice: e.target.value }))}
+                  disabled={patchExpense.isPending}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Total (opsional)</Label>
+              <Input
+                inputMode="decimal"
+                value={editForm.totalPrice}
+                onChange={(e) => setEditForm((f) => ({ ...f, totalPrice: e.target.value }))}
+                placeholder="Kosongkan jika mengandalkan hitung otomatis setelah ubah qty/harga"
+                disabled={patchExpense.isPending}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Jika qty atau harga berubah dan total tidak Anda ubah dari nilai lama, server
+                menghitung ulang. Isi total hanya bila ingin nilai khusus.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Catatan</Label>
+              <textarea
+                rows={2}
+                className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[60px] w-full rounded-md border px-3 py-2 text-sm shadow-xs focus-visible:ring-[3px] focus-visible:outline-none"
+                value={editForm.notes}
+                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="Kosongkan untuk hapus catatan (simpan)"
+                disabled={patchExpense.isPending}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setExpenseToEdit(null)}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              className="btn-gradient border-0"
+              disabled={!canSubmitEdit || patchExpense.isPending}
+              onClick={() => patchExpense.mutate()}
+            >
+              {patchExpense.isPending ? "Menyimpan…" : "Simpan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!expenseToDelete} onOpenChange={(o) => !o && setExpenseToDelete(null)}>
         <DialogContent className="sm:max-w-sm">

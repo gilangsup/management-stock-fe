@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import {
@@ -63,6 +63,17 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
   const [expenseDate, setExpenseDate] = useState(anchorDate);
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>(() => [newLine()]);
+  /** Supaya reset hanya saat dialog baru dibuka (bukan saat anchorDate berubah saat sudah terbuka). */
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setExpenseDate(anchorDate);
+      setNotes("");
+      setLines([newLine()]);
+    }
+    wasOpenRef.current = open;
+  }, [open, anchorDate]);
 
   const grandPreview = useMemo(() => {
     let sum = 0;
@@ -139,6 +150,9 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
       } else {
         toast.success("Pembelian tercatat");
       }
+      setExpenseDate(anchorDate);
+      setNotes("");
+      setLines([newLine()]);
       onOpenChange(false);
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expenses-summary"] });
@@ -200,17 +214,8 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
     return complete >= 1;
   }, [lines]);
 
-  function handleOpenChange(next: boolean) {
-    if (next) {
-      setExpenseDate(anchorDate);
-      setNotes("");
-      setLines([newLine()]);
-    }
-    onOpenChange(next);
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[min(90vh,800px)] flex-col gap-0 overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Tambah pembelian</DialogTitle>
