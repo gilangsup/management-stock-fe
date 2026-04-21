@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Hotel, Layers, Ruler, Tags, Wheat } from "lucide-react";
+import { Hotel, Layers, Ruler, Tags, Upload, Wheat } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const inventori = [
   { href: "/stock/bahan-baku", label: "Bahan baku", icon: Wheat },
   { href: "/stock/barang-jadi", label: "Barang jadi", icon: Tags },
   { href: "/stock/harga-hotel", label: "Harga hotel", icon: Hotel },
+  { href: "/stock/bulk-master", label: "Bulk master", icon: Upload },
 ];
 
 const kategori = [

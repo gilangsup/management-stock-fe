@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Eye, Plus, Store } from "lucide-react";
 import { DateField } from "@/components/forms/date-field";
 import { AppShell } from "@/components/layout/app-shell";
+import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { SalesTransactionFormDialog } from "@/components/sales/sales-transaction-form-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -87,7 +88,7 @@ export default function PenjualanListPage() {
 
   return (
     <AppShell searchPlaceholder="Cari kode transaksi…">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className={pageStackWide}>
         <PageHeader
           title="List Penjualan"
           description="Faktur penjualan barang jadi ke hotel — harga dari master per hotel, tanpa pajak/diskon."
@@ -156,7 +157,11 @@ export default function PenjualanListPage() {
               </Button>
             </div>
           </div>
-          <Button type="button" className="btn-gradient border-0" onClick={() => setAddOpen(true)}>
+          <Button
+            type="button"
+            className="btn-gradient w-full shrink-0 border-0 sm:w-auto"
+            onClick={() => setAddOpen(true)}
+          >
             <Plus className="mr-2 size-4" />
             Tambah transaksi
           </Button>

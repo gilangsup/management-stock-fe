@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
+import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { DateField } from "@/components/forms/date-field";
 import { Badge } from "@/components/ui/badge";
@@ -86,7 +87,7 @@ export default function ReceivablesPage() {
 
   return (
     <AppShell searchPlaceholder="Cari piutang…">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className={pageStackWide}>
         <PageHeader
           title="Piutang"
           description="Piutang otomatis dari total kwitansi penukaran faktur — catat pembayaran di sini."

@@ -48,9 +48,9 @@ export default function ReceiptPrintPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-muted/80 to-background p-8 text-foreground print:bg-white print:p-6">
-      <div className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-border bg-card p-8 shadow-sm print:rounded-none print:border-0 print:shadow-none">
-        <div className="-mx-8 -mt-8 mb-6 h-1 bg-primary/35 print:hidden" />
+    <div className="min-h-screen bg-gradient-to-b from-muted/80 to-background p-4 text-foreground sm:p-8 print:bg-white print:p-6">
+      <div className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-8 print:rounded-none print:border-0 print:shadow-none print:p-6">
+        <div className="-mx-4 -mt-4 mb-6 h-1 bg-primary/35 sm:-mx-8 sm:-mt-8 print:hidden" />
         <div className="text-center">
           <h1 className="text-xl font-bold text-foreground print:text-foreground">
             KWITANSI

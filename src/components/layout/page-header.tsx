@@ -22,7 +22,7 @@ export function PageHeader({ title, description, children, className }: Props) {
             aria-hidden
           />
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
               {title}
             </h1>
             {description ? (
@@ -33,7 +33,11 @@ export function PageHeader({ title, description, children, className }: Props) {
           </div>
         </div>
       </div>
-      {children ? <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div> : null}
+      {children ? (
+        <div className="flex w-full shrink-0 flex-wrap items-stretch gap-2 sm:w-auto sm:items-center">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }

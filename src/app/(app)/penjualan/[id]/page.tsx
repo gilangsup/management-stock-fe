@@ -7,6 +7,8 @@ import { useParams } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { AppShell } from "@/components/layout/app-shell";
+import { pageStackNarrow } from "@/lib/page-layout";
+import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,8 +21,11 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { formatDate, formatIdr } from "@/lib/format";
-import { cn } from "@/lib/utils";
-import type { SalesInvoiceDetail } from "@/types/sales";
+import {
+  type SalesInvoiceDetail,
+  salesLineProductName,
+  salesLineUnitPrice,
+} from "@/types/sales";
 
 export default function PenjualanDetailPage() {
   const params = useParams();
@@ -40,7 +45,9 @@ export default function PenjualanDetailPage() {
   if (isLoading) {
     return (
       <AppShell>
-        <div className="mx-auto max-w-4xl py-12 text-center text-muted-foreground">Memuat…</div>
+        <div className={cn(pageStackNarrow, "py-12 text-center text-muted-foreground")}>
+          Memuat…
+        </div>
       </AppShell>
     );
   }
@@ -49,7 +56,7 @@ export default function PenjualanDetailPage() {
     const notFound = isAxiosError(error) && error.response?.status === 404;
     return (
       <AppShell>
-        <div className="mx-auto max-w-4xl space-y-4 py-8">
+        <div className={cn(pageStackNarrow, "space-y-4 py-8")}>
           <p className="text-muted-foreground">
             {notFound
               ? "Faktur penjualan tidak ditemukan."
@@ -76,7 +83,7 @@ export default function PenjualanDetailPage() {
 
   return (
     <AppShell searchPlaceholder="…">
-      <div className="mx-auto max-w-4xl space-y-8">
+      <div className={pageStackNarrow}>
         <PageHeader
           title={`Faktur ${d.transactionCode}`}
           description="Detail penjualan barang jadi ke hotel — cetak Bon dari tombol di bawah."
@@ -158,14 +165,14 @@ export default function PenjualanDetailPage() {
                 {(d.lines ?? []).map((line, i) => (
                   <TableRow key={i}>
                     <TableCell className="font-mono text-xs">{line.itemCode}</TableCell>
-                    <TableCell className="font-medium">{line.name}</TableCell>
+                    <TableCell className="font-medium">{salesLineProductName(line)}</TableCell>
                     <TableCell>
                       {line.unit.name}{" "}
                       <span className="text-xs text-muted-foreground">({line.unit.code})</span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{line.qty}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatIdr(line.sellPrice)}
+                      {formatIdr(salesLineUnitPrice(line))}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       {formatIdr(line.lineTotal)}

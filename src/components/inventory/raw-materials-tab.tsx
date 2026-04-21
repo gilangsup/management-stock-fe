@@ -341,10 +341,6 @@ export function RawMaterialsTab({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Bahan baku baru</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Kode mengikuti prefix kategori snack yang sama dengan barang jadi (prefix + 3 digit
-              urut per kategori). Harga tidak di master — dicatat lewat pembelian harian.
-            </p>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="space-y-2">

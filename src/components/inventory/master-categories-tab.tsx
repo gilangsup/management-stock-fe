@@ -5,7 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -109,10 +109,6 @@ export function MasterCategoriesTab({ isAdmin }: Props) {
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
           <div>
             <CardTitle className="text-lg">Kategori barang</CardTitle>
-            <CardDescription>
-              Prefix kode dipakai untuk penomoran barang jadi dan bahan baku (mis. SM001). Satu
-              master untuk keduanya. Kosongkan prefix saat buat agar sistem hitung dari nama.
-            </CardDescription>
           </div>
           <Button
             type="button"
