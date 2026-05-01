@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Hotel, Layers, Ruler, Tags, Upload, Wheat } from "lucide-react";
+import { Hotel, History, Layers, Ruler, Tags, Upload, Wheat } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const inventori = [
-  { href: "/stock/bahan-baku", label: "Bahan baku", icon: Wheat },
-  { href: "/stock/barang-jadi", label: "Barang jadi", icon: Tags },
-  { href: "/stock/harga-hotel", label: "Harga hotel", icon: Hotel },
-  { href: "/stock/bulk-master", label: "Bulk master", icon: Upload },
+  { href: "/stock/bahan-baku", label: "Bahan baku", icon: Wheat, sub: false },
+  { href: "/stock/barang-jadi", label: "Barang jadi", icon: Tags, sub: false },
+  { href: "/stock/barang-jadi/riwayat", label: "Riwayat stok", icon: History, sub: true },
+  { href: "/stock/harga-hotel", label: "Harga hotel", icon: Hotel, sub: false },
+  { href: "/stock/bulk-master", label: "Bulk master", icon: Upload, sub: false },
 ];
 
 const kategori = [
@@ -34,17 +35,18 @@ export function InventorySidebar() {
             const active = pathname === item.href;
             const Icon = item.icon;
             return (
-              <li key={item.href}>
+              <li key={item.href} className={item.sub ? "pl-4" : undefined}>
                 <Link
                   href={item.href}
                   className={cn(
                     "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+                    item.sub && "text-[13px]",
                     active
                       ? "bg-muted text-foreground shadow-inner ring-1 ring-border dark:bg-muted/80"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
-                  <Icon className="size-4 shrink-0 opacity-80" />
+                  <Icon className={cn("shrink-0 opacity-80", item.sub ? "size-3.5" : "size-4")} />
                   {item.label}
                 </Link>
               </li>

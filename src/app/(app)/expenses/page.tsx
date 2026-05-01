@@ -2,13 +2,15 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Plus, ShoppingCart } from "lucide-react";
+import { CalendarRange, Plus, ShoppingCart } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { DateField } from "@/components/forms/date-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { StatCard } from "@/components/ui/stat-card";
 import { ExpensePurchaseDialog } from "@/components/expenses/expense-purchase-dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,7 +25,7 @@ import {
 import { api } from "@/lib/api";
 import { formatDate, formatDecimalQty, formatIdr } from "@/lib/format";
 
-type Range = "today" | "week" | "month";
+type Range = "today" | "week" | "month" | "custom";
 
 type ExpenseRow = {
   id: string;
@@ -44,10 +46,19 @@ export default function ExpensesPage() {
   const anchor = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [range, setRange] = useState<Range>("today");
   const [date, setDate] = useState(anchor);
+  const [customFrom, setCustomFrom] = useState(anchor);
+  const [customTo, setCustomTo] = useState(anchor);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
 
+  const isCustom = range === "custom";
+
+  // Params yang dikirim ke API
+  const apiParams = isCustom
+    ? { from: customFrom, to: customTo }
+    : { range, date };
+
   const summary = useQuery({
-    queryKey: ["expenses-summary", range, date],
+    queryKey: ["expenses-summary", range, date, customFrom, customTo],
     queryFn: async () => {
       const { data } = await api.get<{
         data: {
@@ -62,20 +73,20 @@ export default function ExpensesPage() {
             totalExpenses: string;
           }[];
         };
-      }>("/expenses/summary", { params: { range, date } });
+      }>("/expenses/summary", { params: apiParams });
       return data;
     },
   });
 
   const list = useQuery({
-    queryKey: ["expenses", range, date],
+    queryKey: ["expenses", range, date, customFrom, customTo],
     queryFn: async () => {
       const { data } = await api.get<{
         data: ExpenseRow[];
         meta: {
           summary: { totalExpenditure: string; totalQty: string; lineCount: number };
         };
-      }>("/expenses", { params: { range, date, limit: 500 } });
+      }>("/expenses", { params: { ...apiParams, limit: 500 } });
       return data;
     },
   });
@@ -87,9 +98,9 @@ export default function ExpensesPage() {
       <div className={pageStackWide}>
         <PageHeader
           title="Belanja harian"
-          description="Catat pembelian bahan baku (qty, harga per satuan, total). Ringkasan harian, mingguan, dan bulanan."
+          description="Catat pembelian bahan baku (qty, harga per satuan, total). Ringkasan harian, mingguan, bulanan, dan kustom."
         >
-          <DateField value={date} onChange={setDate} />
+          {!isCustom && <DateField value={date} onChange={setDate} />}
           <Button
             type="button"
             className="btn-gradient border-0"
@@ -127,7 +138,7 @@ export default function ExpensesPage() {
                 Periode sesuai tab di bawah
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Rentang: {summary.data?.data.from ?? "—"} → {summary.data?.data.to ?? "—"}
+                Rentang: {summary.data?.data.from ?? "—"} — {summary.data?.data.to ?? "—"}
               </p>
             </CardContent>
           </Card>
@@ -139,8 +150,46 @@ export default function ExpensesPage() {
               <TabsTrigger value="today">Harian</TabsTrigger>
               <TabsTrigger value="week">Mingguan</TabsTrigger>
               <TabsTrigger value="month">Bulanan</TabsTrigger>
+              <TabsTrigger value="custom">
+                <CalendarRange className="mr-1.5 size-3.5" />
+                Kustom
+              </TabsTrigger>
             </TabsList>
           </div>
+
+          {/* Panel pilih rentang kustom */}
+          {isCustom && (
+            <div className="surface-panel flex flex-col gap-4 sm:flex-row sm:items-end">
+              <div className="flex flex-1 flex-col gap-4 sm:flex-row sm:items-end">
+                <div className="space-y-2">
+                  <Label>Dari tanggal</Label>
+                  <Input
+                    type="date"
+                    value={customFrom}
+                    max={customTo}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="w-full sm:w-44"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Sampai tanggal</Label>
+                  <Input
+                    type="date"
+                    value={customTo}
+                    min={customFrom}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="w-full sm:w-44"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Menampilkan data dari{" "}
+                <strong className="font-medium text-foreground">{formatDate(customFrom)}</strong>{" "}
+                sampai{" "}
+                <strong className="font-medium text-foreground">{formatDate(customTo)}</strong>
+              </p>
+            </div>
+          )}
         </Tabs>
 
         {summary.data?.data.dailyBreakdown && summary.data.data.dailyBreakdown.length > 0 ? (
