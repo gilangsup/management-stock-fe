@@ -127,6 +127,7 @@ export function RawMaterialsTab({
       toast.success("Bahan baku diperbarui");
       setEditRow(null);
       qc.invalidateQueries({ queryKey: ["raw-materials"] });
+      qc.invalidateQueries({ queryKey: ["dash-inventory"] });
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "Gagal memperbarui")),
   });
@@ -148,7 +149,7 @@ export function RawMaterialsTab({
     setForm({
       name: row.name,
       unitId: row.unit.id,
-      snackCategoryId: "",
+      snackCategoryId: row.snackCategory.id,
       costPrice: String(Number(row.costPrice)),
     });
     setEditRow(row);
@@ -433,11 +434,38 @@ export function RawMaterialsTab({
             <DialogTitle>Ubah bahan baku</DialogTitle>
             {editRow ? (
               <p className="text-sm text-muted-foreground">
-                Kode {editRow.itemCode ?? "—"} tidak berubah. Hanya nama dan satuan.
+                Kode saat ini:{" "}
+                <span className="font-mono font-semibold text-foreground">
+                  {editRow.itemCode ?? "—"}
+                </span>
+                . Mengganti kategori snack akan mengalokasikan urut baru di kategori tujuan dan
+                mengganti kode (sama seperti barang jadi).
               </p>
             ) : null}
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label>Kategori (master snack)</Label>
+              <Select
+                value={form.snackCategoryId ? String(form.snackCategoryId) : undefined}
+                onValueChange={(v) => setForm((f) => ({ ...f, snackCategoryId: v ?? "" }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih kategori">
+                    {(val) =>
+                      labelForSnackCategoryValue(catList, val, { withPrefix: true }) ?? undefined
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {catList.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.codePrefix ? `${c.name} (${c.codePrefix})` : c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Nama</Label>
               <Input
@@ -481,7 +509,13 @@ export function RawMaterialsTab({
             <Button
               type="button"
               className="btn-gradient border-0"
-              disabled={!form.name.trim() || !form.unitId || patch.isPending}
+              disabled={
+                !form.name.trim() ||
+                !form.unitId ||
+                !form.snackCategoryId ||
+                patch.isPending ||
+                categoriesLoading
+              }
               onClick={() => patch.mutate()}
             >
               Simpan

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
+  Boxes,
   Building2,
   LayoutDashboard,
   Package,
@@ -24,6 +25,7 @@ export type MainNavItem = {
 export const MAIN_NAV_ITEMS: MainNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/stock/bahan-baku", label: "Master Data", icon: Package },
+  { href: "/stock-barang-jadi", label: "Stock barang jadi", icon: Boxes },
   { href: "/expenses", label: "Belanja harian", icon: ShoppingCart },
   { href: "/penjualan", label: "List Penjualan", icon: Store },
   { href: "/invoice-exchange", label: "Penukaran faktur", icon: Receipt },
@@ -32,7 +34,10 @@ export const MAIN_NAV_ITEMS: MainNavItem[] = [
 ];
 
 export function isMainNavActive(pathname: string, href: string): boolean {
-  if (href === "/stock/bahan-baku") return pathname.startsWith("/stock");
+  if (href === "/stock/bahan-baku") {
+    return pathname.startsWith("/stock") && !pathname.startsWith("/stock-barang-jadi");
+  }
+  if (href === "/stock-barang-jadi") return pathname.startsWith("/stock-barang-jadi");
   if (href === "/penjualan") return pathname.startsWith("/penjualan");
   return pathname === href || pathname.startsWith(`${href}/`);
 }

@@ -6,41 +6,34 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { ApiListResponse, RawMaterialRow } from "@/components/inventory/types";
+import type { ApiListResponse, FinishedProductRow } from "./types";
 
 const PAGE_LIMIT = 50;
 
-type SearchScope = "__all__" | "name" | "itemCode";
-
 type Props = {
   value: string;
-  onChange: (rawMaterialId: string) => void;
+  onChange: (finishedProductId: string) => void;
   disabled?: boolean;
   placeholder?: string;
   id?: string;
+  /** Tampilkan stok saat ini di daftar */
+  showStock?: boolean;
 };
 
-export function RawMaterialCombobox({
+export function FinishedProductCombobox({
   value,
   onChange,
   disabled,
-  placeholder = "Pilih bahan baku",
+  placeholder = "Pilih barang jadi",
   id,
+  showStock = true,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
-  const [searchScope, setSearchScope] = useState<SearchScope>("__all__");
-  const [picked, setPicked] = useState<RawMaterialRow | null>(null);
+  const [picked, setPicked] = useState<FinishedProductRow | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedQ(q.trim()), 300);
@@ -52,18 +45,11 @@ export function RawMaterialCombobox({
   }, [value]);
 
   const listQuery = useQuery({
-    queryKey: ["raw-materials", "combobox-search", debouncedQ, searchScope],
+    queryKey: ["finished-products", "combobox-search", debouncedQ],
     queryFn: async () => {
-      const params: Record<string, string | number> = {
-        page: 1,
-        limit: PAGE_LIMIT,
-      };
-      if (debouncedQ) {
-        params.search = debouncedQ;
-        if (searchScope === "name") params.searchBy = "name";
-        if (searchScope === "itemCode") params.searchBy = "itemCode";
-      }
-      const { data } = await api.get<ApiListResponse<RawMaterialRow>>("/raw-materials", {
+      const params: Record<string, string | number> = { page: 1, limit: PAGE_LIMIT };
+      if (debouncedQ) params.search = debouncedQ;
+      const { data } = await api.get<ApiListResponse<FinishedProductRow>>("/finished-products", {
         params,
       });
       return data;
@@ -91,6 +77,9 @@ export function RawMaterialCombobox({
     return apiRows.find((x) => String(x.id) === String(value)) ?? null;
   }, [value, picked, apiRows]);
 
+  const stockOf = (r: FinishedProductRow) =>
+    typeof r.stockQuantity === "number" ? r.stockQuantity : Number(r.stockQuantity ?? 0);
+
   return (
     <Popover
       open={open}
@@ -99,7 +88,6 @@ export function RawMaterialCombobox({
         if (next) {
           setQ("");
           setDebouncedQ("");
-          setSearchScope("__all__");
         } else {
           setQ("");
           setDebouncedQ("");
@@ -120,12 +108,13 @@ export function RawMaterialCombobox({
           ) : selected ? (
             <>
               <span className="font-medium">{selected.name}</span>{" "}
-              <span className="text-muted-foreground">
-                ({selected.itemCode ?? "—"}) · {selected.unit.name}
-              </span>
+              <span className="font-mono text-muted-foreground">({selected.itemCode})</span>
+              {showStock ? (
+                <span className="text-muted-foreground"> · stok {stockOf(selected)}</span>
+              ) : null}
             </>
           ) : value ? (
-            <span className="text-muted-foreground">Bahan baku dipilih · ketuk untuk mengubah</span>
+            <span className="text-muted-foreground">Barang dipilih · ketuk untuk mengubah</span>
           ) : (
             <span className="text-muted-foreground">{placeholder}</span>
           )}
@@ -137,43 +126,17 @@ export function RawMaterialCombobox({
         className="flex w-[min(28rem,calc(100vw-2rem))] flex-col gap-2 p-2"
         sideOffset={4}
       >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            placeholder="Cari nama atau kode…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="h-9 flex-1"
-            autoComplete="off"
-            autoFocus
-          />
-          <Select
-            value={searchScope}
-            onValueChange={(v) => setSearchScope(v as SearchScope)}
-          >
-            <SelectTrigger
-              className="h-9 w-full shrink-0 sm:w-[11rem]"
-              aria-label="Ruang pencarian"
-            >
-              <SelectValue>
-                {searchScope === "name"
-                  ? "Hanya nama"
-                  : searchScope === "itemCode"
-                    ? "Hanya kode"
-                    : "Nama atau kode"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Nama atau kode</SelectItem>
-              <SelectItem value="name">Hanya nama</SelectItem>
-              <SelectItem value="itemCode">Hanya kode</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          Pencarian lewat server. Kosongkan kotak untuk melihat halaman pertama.
-        </p>
+        <Input
+          placeholder="Cari nama atau kode…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="h-9"
+          autoComplete="off"
+          autoFocus
+        />
+        <p className="text-[11px] text-muted-foreground">Pencarian lewat server.</p>
         {listQuery.isError ? (
-          <p className="px-2 py-4 text-center text-xs text-destructive">Gagal memuat bahan baku.</p>
+          <p className="px-2 py-4 text-center text-xs text-destructive">Gagal memuat barang jadi.</p>
         ) : (
           <ScrollArea className="h-[min(280px,50vh)]">
             <div className="flex flex-col gap-0.5 pr-2">
@@ -182,8 +145,8 @@ export function RawMaterialCombobox({
               ) : rows.length === 0 ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">
                   {debouncedQ
-                    ? "Tidak ada bahan baku yang cocok."
-                    : "Belum ada bahan baku. Tambahkan di Inventori → Bahan baku."}
+                    ? "Tidak ada barang yang cocok."
+                    : "Belum ada barang jadi di master."}
                 </p>
               ) : (
                 rows.map((r) => {
@@ -214,7 +177,8 @@ export function RawMaterialCombobox({
                       <span className="min-w-0 flex-1">
                         <span className="block font-medium leading-tight">{r.name}</span>
                         <span className="text-xs text-muted-foreground">
-                          {r.itemCode ?? "—"} · {r.unit.name} ({r.unit.code})
+                          {r.itemCode} · {r.snackCategory.name}
+                          {showStock ? ` · stok ${stockOf(r)}` : ""}
                         </span>
                       </span>
                     </button>
@@ -226,8 +190,7 @@ export function RawMaterialCombobox({
         )}
         {metaTotal != null && apiRows.length > 0 && metaTotal > apiRows.length ? (
           <p className="text-[11px] text-muted-foreground">
-            Menampilkan {apiRows.length} dari {metaTotal}. Persempit kata kunci atau pilih &quot;Hanya
-            nama/kode&quot;.
+            Menampilkan {apiRows.length} dari {metaTotal}. Persempit pencarian.
           </p>
         ) : null}
       </PopoverContent>

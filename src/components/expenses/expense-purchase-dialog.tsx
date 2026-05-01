@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import {
@@ -18,11 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { formatIdr } from "@/lib/format";
-import type { ApiListResponse, RawMaterialRow } from "@/components/inventory/types";
 import type { ExpenseBatchSuccessResponse } from "@/types/expenses";
 import { RawMaterialCombobox } from "./raw-material-combobox";
-
-const RAW_MATERIAL_PICKER_LIMIT = 500;
 
 function isExpenseTotalFromQtyAndUnit(qty: string, unitPrice: string): boolean {
   const tq = qty.trim();
@@ -66,20 +63,17 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
   const [expenseDate, setExpenseDate] = useState(anchorDate);
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>(() => [newLine()]);
+  /** Supaya reset hanya saat dialog baru dibuka (bukan saat anchorDate berubah saat sudah terbuka). */
+  const wasOpenRef = useRef(false);
 
-  const rawMaterialsPicker = useQuery({
-    queryKey: ["raw-materials", "picker"],
-    queryFn: async () => {
-      const { data } = await api.get<ApiListResponse<RawMaterialRow>>("/raw-materials", {
-        params: { page: 1, limit: RAW_MATERIAL_PICKER_LIMIT },
-      });
-      return data;
-    },
-    enabled: open,
-    staleTime: 30_000,
-  });
-
-  const rmList = rawMaterialsPicker.data?.data ?? [];
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setExpenseDate(anchorDate);
+      setNotes("");
+      setLines([newLine()]);
+    }
+    wasOpenRef.current = open;
+  }, [open, anchorDate]);
 
   const grandPreview = useMemo(() => {
     let sum = 0;
@@ -156,6 +150,9 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
       } else {
         toast.success("Pembelian tercatat");
       }
+      setExpenseDate(anchorDate);
+      setNotes("");
+      setLines([newLine()]);
       onOpenChange(false);
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expenses-summary"] });
@@ -217,17 +214,8 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
     return complete >= 1;
   }, [lines]);
 
-  function handleOpenChange(next: boolean) {
-    if (next) {
-      setExpenseDate(anchorDate);
-      setNotes("");
-      setLines([newLine()]);
-    }
-    onOpenChange(next);
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[min(90vh,800px)] flex-col gap-0 overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Tambah pembelian</DialogTitle>
@@ -288,7 +276,6 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                   <div className="space-y-1.5">
                     <Label className="text-xs">Bahan baku</Label>
                     <RawMaterialCombobox
-                      items={rmList}
                       value={line.rawMaterialId}
                       onChange={(id) =>
                         setLines((prev) =>
@@ -297,8 +284,7 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                           ),
                         )
                       }
-                      loading={rawMaterialsPicker.isLoading}
-                      disabled={rawMaterialsPicker.isLoading}
+                      disabled={createBatch.isPending}
                     />
                   </div>
 
@@ -381,11 +367,6 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
               );
             })}
 
-            {!rawMaterialsPicker.isLoading && rmList.length === 0 ? (
-              <p className="text-xs text-destructive">
-                Belum ada bahan baku. Tambahkan di Inventori → Bahan baku.
-              </p>
-            ) : null}
           </div>
 
           <div className="space-y-2">

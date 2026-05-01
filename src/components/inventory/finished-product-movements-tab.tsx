@@ -234,7 +234,7 @@ export function FinishedProductMovementsTab() {
             <Select
               value={fpFilter || "__all__"}
               onValueChange={(v) => {
-                setFpFilter(v === "__all__" ? "" : v);
+                setFpFilter(v === "__all__" ? "" : (v ?? ""));
                 setPage(1);
               }}
             >
@@ -262,7 +262,7 @@ export function FinishedProductMovementsTab() {
             <Select
               value={dirFilter || "__all__"}
               onValueChange={(v) => {
-                setDirFilter(v === "__all__" ? "" : v);
+                setDirFilter(v === "__all__" ? "" : (v ?? ""));
                 setPage(1);
               }}
             >
@@ -620,7 +620,7 @@ function MovementFormFields({
         <Label>Arah</Label>
         <Select
           value={form.direction}
-          onValueChange={(v: "masuk" | "keluar") => setForm((f) => ({ ...f, direction: v }))}
+          onValueChange={(v) => { if (v === "masuk" || v === "keluar") setForm((f) => ({ ...f, direction: v })); }}
         >
           <SelectTrigger className="w-full">
             <SelectValue>
