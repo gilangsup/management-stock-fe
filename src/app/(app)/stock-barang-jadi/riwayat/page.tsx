@@ -259,7 +259,7 @@ export default function RiwayatStokBarangJadiPage() {
               <TableHead className="text-right">Qty</TableHead>
               <TableHead>PIC</TableHead>
               <TableHead>Dicatat</TableHead>
-              <TableHead className="text-right">Stok SKU*</TableHead>
+              <TableHead className="text-right">Saldo setelah</TableHead>
               <TableHead className="w-[120px] text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
@@ -285,8 +285,8 @@ export default function RiwayatStokBarangJadiPage() {
                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                   {formatDateTimeId(row.createdAt)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums text-muted-foreground">
-                  {formatIntegerQty(row.finishedProduct.stockQuantity)}
+                <TableCell className="text-right tabular-nums font-medium">
+                  {formatIntegerQty(row.stockAfter)}
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
@@ -323,8 +323,8 @@ export default function RiwayatStokBarangJadiPage() {
           </TableBody>
         </Table>
         <p className="border-t border-border bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
-          *Stok SKU = nilai master saat ini (bukan stok pada saat transaksi). Mengubah atau menghapus
-          riwayat menyesuaikan stok master di server.
+          Saldo setelah = sisa stok kumulatif tepat setelah transaksi tersebut (historis). Mengubah
+          atau menghapus riwayat otomatis menghitung ulang saldo seluruh baris produk di server.
         </p>
         <div className="flex flex-col gap-2 border-t border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span>

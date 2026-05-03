@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { formatIdr } from "@/lib/format";
 import type { ExpenseBatchSuccessResponse } from "@/types/expenses";
+import type { RawMaterialRow } from "@/components/inventory/types";
 import { RawMaterialCombobox } from "./raw-material-combobox";
 
 function isExpenseTotalFromQtyAndUnit(qty: string, unitPrice: string): boolean {
@@ -35,6 +36,8 @@ type LineDraft = {
   rawMaterialId: string;
   qty: string;
   unitPrice: string;
+  /** costPrice dari master bahan baku yang dipilih; dipakai sebagai pre-fill. */
+  masterCostPrice: string;
   totalPrice: string;
   /** Override catatan global untuk baris ini (opsional). */
   lineNotes: string;
@@ -46,6 +49,7 @@ function newLine(): LineDraft {
     rawMaterialId: "",
     qty: "1",
     unitPrice: "",
+    masterCostPrice: "",
     totalPrice: "",
     lineNotes: "",
   };
@@ -78,8 +82,10 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
   const grandPreview = useMemo(() => {
     let sum = 0;
     for (const line of lines) {
-      if (isExpenseTotalFromQtyAndUnit(line.qty, line.unitPrice)) {
-        sum += Number(line.qty.trim()) * Number(line.unitPrice.trim());
+      const effectiveUnitPrice =
+        line.unitPrice.trim() !== "" ? line.unitPrice.trim() : line.masterCostPrice.trim();
+      if (isExpenseTotalFromQtyAndUnit(line.qty, effectiveUnitPrice)) {
+        sum += Number(line.qty.trim()) * Number(effectiveUnitPrice);
       } else {
         const tp = line.totalPrice.trim();
         if (tp !== "" && Number.isFinite(Number(tp))) sum += Number(tp);
@@ -93,7 +99,7 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
       const payload: {
         rawMaterialId: string;
         qty: number;
-        unitPrice: number;
+        unitPrice?: number;
         totalPrice?: number;
         notes?: string;
       }[] = [];
@@ -110,15 +116,21 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
 
         if (!line.rawMaterialId.trim()) throw new Error("BARIS_MATERIAL");
         const q = Number(line.qty);
-        const u = Number(line.unitPrice);
         if (!Number.isFinite(q) || q <= 0) throw new Error("BARIS_QTY");
-        if (!Number.isFinite(u) || u < 0) throw new Error("BARIS_HARGA");
+
+        const hasUnitPrice = line.unitPrice.trim() !== "";
+        if (hasUnitPrice) {
+          const u = Number(line.unitPrice);
+          if (!Number.isFinite(u) || u < 0) throw new Error("BARIS_HARGA");
+        }
 
         const row: (typeof payload)[0] = {
           rawMaterialId: String(line.rawMaterialId),
           qty: q,
-          unitPrice: u,
         };
+        if (hasUnitPrice) {
+          row.unitPrice = Number(line.unitPrice);
+        }
         if (!isExpenseTotalFromQtyAndUnit(line.qty, line.unitPrice)) {
           const tp = line.totalPrice.trim();
           if (tp !== "" && Number.isFinite(Number(tp))) row.totalPrice = Number(tp);
@@ -199,14 +211,9 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
         line.lineNotes.trim() !== "";
       if (!hasAny) continue;
       const q = Number(line.qty);
-      const u = Number(line.unitPrice);
-      if (
-        !line.rawMaterialId.trim() ||
-        !Number.isFinite(q) ||
-        q <= 0 ||
-        !Number.isFinite(u) ||
-        u < 0
-      ) {
+      const hasUnitPrice = line.unitPrice.trim() !== "";
+      const unitPriceValid = !hasUnitPrice || (Number.isFinite(Number(line.unitPrice)) && Number(line.unitPrice) >= 0);
+      if (!line.rawMaterialId.trim() || !Number.isFinite(q) || q <= 0 || !unitPriceValid) {
         return false;
       }
       complete += 1;
@@ -284,6 +291,20 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                           ),
                         )
                       }
+                      onSelect={(row: RawMaterialRow) => {
+                        const cp = Number(row.costPrice);
+                        setLines((prev) =>
+                          prev.map((l) =>
+                            l.key === line.key
+                              ? {
+                                  ...l,
+                                  masterCostPrice: row.costPrice ?? "",
+                                  unitPrice: cp > 0 ? String(cp) : l.unitPrice,
+                                }
+                              : l,
+                          ),
+                        );
+                      }}
                       disabled={createBatch.isPending}
                     />
                   </div>
@@ -304,10 +325,17 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                       />
                     </div>
                     <div className="space-y-1.5 sm:col-span-1">
-                      <Label className="text-xs">Harga beli / satuan (Rp)</Label>
+                      <Label className="text-xs">
+                        Harga beli / satuan (Rp)
+                        <span className="ml-1 font-normal text-muted-foreground">— opsional</span>
+                      </Label>
                       <Input
                         inputMode="decimal"
-                        placeholder="0"
+                        placeholder={
+                          line.masterCostPrice && Number(line.masterCostPrice) > 0
+                            ? `Acuan: ${Number(line.masterCostPrice).toLocaleString("id-ID")}`
+                            : "Dari master / isi manual"
+                        }
                         value={line.unitPrice}
                         onChange={(e) =>
                           setLines((prev) =>
@@ -317,6 +345,11 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                           )
                         }
                       />
+                      {line.masterCostPrice && Number(line.masterCostPrice) > 0 && !line.unitPrice && (
+                        <p className="text-[11px] text-primary/70">
+                          Server pakai {formatIdr(line.masterCostPrice)} dari master jika dikosongkan.
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label className="text-xs">Total baris (opsional)</Label>

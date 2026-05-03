@@ -26,6 +26,8 @@ export type RawMaterialRow = {
   id: string;
   itemCode: string | null;
   name: string;
+  /** Harga satuan acuan; string DECIMAL dari API (mis. "15000.0000"). Default "0.0000". */
+  costPrice: string;
   unit: { id: string; code: string; name: string };
   /** Sama sumber master dengan barang jadi — prefix + 3 digit urut per kategori. */
   snackCategory: { id: string; name: string; codePrefix: string };
@@ -52,6 +54,8 @@ export type FinishedProductStockMovementRow = {
   id: string;
   direction: "in" | "out";
   quantity: number;
+  /** Saldo kumulatif stok setelah transaksi ini (historis, bukan nilai master saat ini). */
+  stockAfter: number;
   productionDate: string | null;
   pickupDate: string | null;
   picName: string;

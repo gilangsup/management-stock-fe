@@ -31,6 +31,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RawMaterialCombobox } from "@/components/expenses/raw-material-combobox";
+import type { RawMaterialRow } from "@/components/inventory/types";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { getStoredUser } from "@/lib/auth-storage";
@@ -49,6 +50,7 @@ type ExpenseRow = {
     id: string;
     name: string;
     itemCode: string | null;
+    costPrice?: string;
     unit: { id: string; code: string; name: string };
   };
 };
@@ -70,6 +72,8 @@ export default function ExpensesPage() {
     totalPrice: "",
     notes: "",
   });
+  /** costPrice dari bahan baku yang sedang dipilih di form edit, untuk tampil sebagai referensi. */
+  const [editMasterCostPrice, setEditMasterCostPrice] = useState("");
 
   const summary = useQuery({
     queryKey: ["expenses-summary", range, date],
@@ -112,10 +116,11 @@ export default function ExpensesPage() {
       expenseDate: d,
       rawMaterialId: expenseToEdit.rawMaterial.id,
       qty: String(expenseToEdit.qty),
-      unitPrice: String(expenseToEdit.unitPrice),
+      unitPrice: String(Number(expenseToEdit.unitPrice)),
       totalPrice: String(expenseToEdit.totalPrice),
       notes: expenseToEdit.notes ?? "",
     });
+    setEditMasterCostPrice(expenseToEdit.rawMaterial.costPrice ?? "");
   }, [expenseToEdit]);
 
   function buildExpensePatchBody(original: ExpenseRow): Record<string, unknown> | null {
@@ -127,15 +132,16 @@ export default function ExpensesPage() {
     }
 
     const qtyNum = Number(editForm.qty);
-    const unitNum = Number(editForm.unitPrice);
     const origQtyNum = Number(original.qty);
     const origUnitNum = Number(original.unitPrice);
     const qtyChanged =
       editForm.qty.trim() !== "" && Number.isFinite(qtyNum) && qtyNum !== origQtyNum;
+
+    const hasUnitPrice = editForm.unitPrice.trim() !== "";
+    const unitNum = hasUnitPrice ? Number(editForm.unitPrice) : NaN;
     const unitChanged =
-      editForm.unitPrice.trim() !== "" &&
-      Number.isFinite(unitNum) &&
-      unitNum !== origUnitNum;
+      hasUnitPrice && Number.isFinite(unitNum) && unitNum !== origUnitNum;
+
     if (qtyChanged) body.qty = qtyNum;
     if (unitChanged) body.unitPrice = unitNum;
 
@@ -207,14 +213,17 @@ export default function ExpensesPage() {
 
   const metaSum = list.data?.meta.summary;
 
+  const unitPriceEditValid =
+    editForm.unitPrice.trim() === "" ||
+    (Number.isFinite(Number(editForm.unitPrice)) && Number(editForm.unitPrice) >= 0);
+
   const canSubmitEdit =
     expenseToEdit &&
     editForm.rawMaterialId &&
     editForm.expenseDate &&
     Number(editForm.qty) > 0 &&
     !Number.isNaN(Number(editForm.qty)) &&
-    Number(editForm.unitPrice) >= 0 &&
-    !Number.isNaN(Number(editForm.unitPrice));
+    unitPriceEditValid;
 
   return (
     <AppShell searchPlaceholder="Cari pembelian…">
@@ -428,6 +437,13 @@ export default function ExpensesPage() {
                 key={expenseToEdit?.id ?? "new"}
                 value={editForm.rawMaterialId}
                 onChange={(id) => setEditForm((f) => ({ ...f, rawMaterialId: id }))}
+                onSelect={(row: RawMaterialRow) => {
+                  const cp = Number(row.costPrice);
+                  setEditMasterCostPrice(row.costPrice ?? "");
+                  if (cp > 0) {
+                    setEditForm((f) => ({ ...f, unitPrice: String(cp) }));
+                  }
+                }}
                 disabled={patchExpense.isPending}
               />
             </div>
@@ -442,13 +458,25 @@ export default function ExpensesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Harga / satuan (Rp)</Label>
+                <Label>
+                  Harga / satuan (Rp)
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">— opsional</span>
+                </Label>
                 <Input
                   inputMode="decimal"
+                  placeholder="Kosongkan untuk pakai harga master"
                   value={editForm.unitPrice}
                   onChange={(e) => setEditForm((f) => ({ ...f, unitPrice: e.target.value }))}
                   disabled={patchExpense.isPending}
                 />
+                {editMasterCostPrice && Number(editMasterCostPrice) > 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Harga acuan master:{" "}
+                    <span className="font-medium text-primary/80">
+                      {formatIdr(editMasterCostPrice)}
+                    </span>
+                  </p>
+                )}
               </div>
             </div>
             <div className="space-y-2">

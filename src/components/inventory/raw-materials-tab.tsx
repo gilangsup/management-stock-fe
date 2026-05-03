@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { formatIdr } from "@/lib/format";
 import { labelForSnackCategoryValue, labelForUnitValue } from "@/lib/select-labels";
 import type { ApiListResponse, RawMaterialRow, SnackCategoryRow, UnitRow } from "./types";
 
@@ -64,6 +65,7 @@ export function RawMaterialsTab({
     name: "",
     unitId: "",
     snackCategoryId: "",
+    costPrice: "0",
   });
 
   const list = useQuery({
@@ -87,12 +89,14 @@ export function RawMaterialsTab({
 
   const create = useMutation({
     mutationFn: async () => {
+      const cpNum = Number(form.costPrice);
       const { data } = await api.post<{ success: boolean; data: RawMaterialRow }>(
         "/raw-materials",
         {
           name: form.name.trim(),
           unitId: form.unitId,
           snackCategoryId: form.snackCategoryId,
+          ...(Number.isFinite(cpNum) && cpNum > 0 ? { costPrice: cpNum } : {}),
         },
       );
       return data;
@@ -100,7 +104,7 @@ export function RawMaterialsTab({
     onSuccess: () => {
       toast.success("Bahan baku ditambahkan");
       setCreateOpen(false);
-      setForm({ name: "", unitId: "", snackCategoryId: "" });
+      setForm({ name: "", unitId: "", snackCategoryId: "", costPrice: "0" });
       qc.invalidateQueries({ queryKey: ["raw-materials"] });
       qc.invalidateQueries({ queryKey: ["dash-inventory"] });
     },
@@ -110,12 +114,14 @@ export function RawMaterialsTab({
   const patch = useMutation({
     mutationFn: async () => {
       if (!editRow) return;
+      const cpNum = Number(form.costPrice);
       const { data } = await api.patch<{ success: boolean; data: RawMaterialRow }>(
         `/raw-materials/${editRow.id}`,
         {
           name: form.name.trim(),
           unitId: form.unitId || undefined,
           snackCategoryId: form.snackCategoryId || undefined,
+          ...(Number.isFinite(cpNum) ? { costPrice: cpNum } : {}),
         },
       );
       return data;
@@ -147,6 +153,7 @@ export function RawMaterialsTab({
       name: row.name,
       unitId: row.unit.id,
       snackCategoryId: row.snackCategory.id,
+      costPrice: row.costPrice ? String(Number(row.costPrice)) : "0",
     });
     setEditRow(row);
   };
@@ -228,6 +235,7 @@ export function RawMaterialsTab({
                 name: "",
                 unitId: firstUnitId,
                 snackCategoryId: firstCatId,
+                costPrice: "0",
               });
               setCreateOpen(true);
             }}
@@ -253,6 +261,7 @@ export function RawMaterialsTab({
               <TableHead>Nama</TableHead>
               <TableHead>Kategori (snack)</TableHead>
               <TableHead>Satuan</TableHead>
+              <TableHead className="text-right">Harga Satuan</TableHead>
               <TableHead className="w-[200px]" />
             </TableRow>
           </TableHeader>
@@ -274,6 +283,9 @@ export function RawMaterialsTab({
                 <TableCell>
                   <span className="text-muted-foreground">{row.unit.name}</span>{" "}
                   <span className="text-xs text-slate-500">({row.unit.code})</span>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {Number(row.costPrice) > 0 ? formatIdr(row.costPrice) : <span className="text-muted-foreground/50">—</span>}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap justify-end gap-1">
@@ -303,7 +315,7 @@ export function RawMaterialsTab({
             ))}
             {!list.data?.data?.length && (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                   {list.isLoading ? "Memuat…" : "Belum ada bahan baku."}
                 </TableCell>
               </TableRow>
@@ -393,6 +405,21 @@ export function RawMaterialsTab({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>
+                Harga Satuan Acuan (Rp)
+                <span className="ml-1 text-xs font-normal text-muted-foreground">— opsional</span>
+              </Label>
+              <Input
+                inputMode="decimal"
+                placeholder="0"
+                value={form.costPrice === "0" ? "" : form.costPrice}
+                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value || "0" }))}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Dipakai sebagai harga default saat input belanja harian.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
@@ -474,6 +501,21 @@ export function RawMaterialsTab({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>
+                Harga Satuan Acuan (Rp)
+                <span className="ml-1 text-xs font-normal text-muted-foreground">— opsional</span>
+              </Label>
+              <Input
+                inputMode="decimal"
+                placeholder="0"
+                value={form.costPrice === "0" ? "" : form.costPrice}
+                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value || "0" }))}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Dipakai sebagai harga default saat input belanja harian.
+              </p>
             </div>
           </div>
           <DialogFooter>
