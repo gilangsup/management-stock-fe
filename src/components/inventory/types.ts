@@ -32,6 +32,8 @@ export type RawMaterialRow = {
   /** Sama sumber master dengan barang jadi — prefix + 3 digit urut per kategori. */
   snackCategory: { id: string; name: string; codePrefix: string };
   categorySeq: number;
+  /** Harga pokok per satuan (DECIMAL dari server, disimpan sebagai string). */
+  costPrice: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -68,6 +70,23 @@ export type FinishedProductStockMovementRow = {
     unit?: { id: string; code: string; name: string } | null;
     snackCategory?: { id: string; name: string; codePrefix: string };
   };
+};
+
+/** Baris dari GET /finished-product-movements — satu riwayat mutasi stok barang jadi. */
+export type FinishedProductMovementRow = {
+  id: string;
+  finishedProductId: string;
+  direction: "masuk" | "keluar";
+  qty: number;
+  picName: string;
+  eventDate: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  productName: string | null;
+  itemCode: string | null;
+  /** Saldo kumulatif stok setelah kejadian ini (running balance). */
+  stockAfter: number | null;
 };
 
 /** Baris dari GET /hotels/:hotelId/finished-sell-prices (satu baris per barang jadi). */

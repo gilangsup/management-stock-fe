@@ -261,7 +261,7 @@ export function RawMaterialsTab({
               <TableHead>Nama</TableHead>
               <TableHead>Kategori (snack)</TableHead>
               <TableHead>Satuan</TableHead>
-              <TableHead className="text-right">Harga Satuan</TableHead>
+              <TableHead className="text-right">Harga pokok</TableHead>
               <TableHead className="w-[200px]" />
             </TableRow>
           </TableHeader>
@@ -407,7 +407,7 @@ export function RawMaterialsTab({
             </div>
             <div className="space-y-2">
               <Label>
-                Harga Satuan Acuan (Rp)
+                Harga pokok (Rp)
                 <span className="ml-1 text-xs font-normal text-muted-foreground">— opsional</span>
               </Label>
               <Input
@@ -504,7 +504,7 @@ export function RawMaterialsTab({
             </div>
             <div className="space-y-2">
               <Label>
-                Harga Satuan Acuan (Rp)
+                Harga pokok (Rp)
                 <span className="ml-1 text-xs font-normal text-muted-foreground">— opsional</span>
               </Label>
               <Input
