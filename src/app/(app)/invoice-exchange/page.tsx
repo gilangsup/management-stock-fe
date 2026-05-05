@@ -248,7 +248,7 @@ export default function InvoiceExchangePage() {
             <span className="text-xs font-medium text-muted-foreground">Hotel</span>
             <Select
               value={filterHotelId || "__all__"}
-              onValueChange={(v) => setFilterHotelId(v === "__all__" ? "" : v)}
+              onValueChange={(v) => setFilterHotelId(!v || v === "__all__" ? "" : v)}
             >
               <SelectTrigger className="h-9 bg-background">
                 <SelectValue />
