@@ -48,3 +48,55 @@ export function formatMarginPercent(value: string | null | undefined): string {
   if (!Number.isFinite(n)) return "—";
   return `${n.toLocaleString("id-ID", { maximumFractionDigits: 2 })}%`;
 }
+
+const SATUAN = [
+  "", "Satu", "Dua", "Tiga", "Empat", "Lima",
+  "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh",
+  "Sebelas", "Dua Belas", "Tiga Belas", "Empat Belas", "Lima Belas",
+  "Enam Belas", "Tujuh Belas", "Delapan Belas", "Sembilan Belas",
+];
+const PULUHAN = [
+  "", "", "Dua Puluh", "Tiga Puluh", "Empat Puluh", "Lima Puluh",
+  "Enam Puluh", "Tujuh Puluh", "Delapan Puluh", "Sembilan Puluh",
+];
+
+function _terbilang(n: number): string {
+  if (n === 0) return "";
+  let result = "";
+  if (n >= 1_000_000_000) {
+    result += _terbilang(Math.floor(n / 1_000_000_000)) + " Miliar ";
+    n %= 1_000_000_000;
+  }
+  if (n >= 1_000_000) {
+    result += _terbilang(Math.floor(n / 1_000_000)) + " Juta ";
+    n %= 1_000_000;
+  }
+  if (n >= 1_000) {
+    const k = Math.floor(n / 1_000);
+    result += (k === 1 ? "Seribu" : _terbilang(k) + " Ribu") + " ";
+    n %= 1_000;
+  }
+  if (n >= 100) {
+    const h = Math.floor(n / 100);
+    result += (h === 1 ? "Seratus" : SATUAN[h] + " Ratus") + " ";
+    n %= 100;
+  }
+  if (n > 0) {
+    if (n < 20) {
+      result += SATUAN[n];
+    } else {
+      result += PULUHAN[Math.floor(n / 10)];
+      if (n % 10 > 0) result += " " + SATUAN[n % 10];
+    }
+  }
+  return result.trim();
+}
+
+/** Konversi angka ke teks Rupiah (terbilang). Contoh: 35500 → "Tiga Puluh Lima Ribu Lima Ratus Rupiah" */
+export function terbilang(value: string | number): string {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(n) || n < 0) return "";
+  const int = Math.floor(n);
+  if (int === 0) return "Nol Rupiah";
+  return _terbilang(int) + " Rupiah";
+}
