@@ -251,7 +251,11 @@ export default function InvoiceExchangePage() {
               onValueChange={(v) => setFilterHotelId(!v || v === "__all__" ? "" : v)}
             >
               <SelectTrigger className="h-9 bg-background">
-                <SelectValue />
+                <SelectValue>
+                  {filterHotelId
+                    ? (labelForHotelValue(hotels.data, filterHotelId) ?? filterHotelId)
+                    : "Semua hotel"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Semua hotel</SelectItem>

@@ -104,22 +104,19 @@ export default function DashboardPage() {
             label="Penukaran faktur"
             icon={Receipt}
             tone="violet"
-            footer="Transaksi tercatat"
+            footer={invoiceCount !== "—" ? `${invoiceCount} transaksi tercatat` : "Transaksi tercatat"}
           >
-            {invoiceCount}
-            {invoiceTotal !== null && (
-              <p className="mt-0.5 text-base font-semibold tabular-nums text-primary">
-                {formatIdr(invoiceTotal)}
-              </p>
-            )}
+            {invoiceTotal !== null ? formatIdr(invoiceTotal) : "—"}
           </StatCard>
-          <StatCard label="Piutang aktif" icon={Wallet} tone="amber" footer="Piutang belum lunas">
-            {openRecvCount}
-            {openRecvTotal !== null && (
-              <p className="mt-0.5 text-base font-semibold tabular-nums text-destructive">
-                {formatIdr(openRecvTotal)}
-              </p>
-            )}
+          <StatCard
+            label="Piutang aktif"
+            icon={Wallet}
+            tone="amber"
+            footer={openRecvCount !== "—" ? `${openRecvCount} piutang belum lunas` : "Piutang belum lunas"}
+          >
+            {openRecvTotal !== null ? (
+              <span className="text-destructive">{formatIdr(openRecvTotal)}</span>
+            ) : "—"}
           </StatCard>
         </div>
       </div>
