@@ -28,7 +28,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { data } = await api.get<{
         data: { totalExpenses: string; totalQty: string };
-      }>("/expenses/summary", { params: { range: "today" } });
+      }>("/expenses/summary", { params: { range: "all" } });
       return data;
     },
   });
@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const invoices = useQuery({
     queryKey: ["invoice-dash"],
     queryFn: async () => {
-      const { data } = await api.get<{ data: unknown[] }>("/invoice-exchanges");
+      const { data } = await api.get<{ data: { totalAmount: string }[] }>("/invoice-exchanges");
       return data;
     },
   });
@@ -44,13 +44,23 @@ export default function DashboardPage() {
   const receivables = useQuery({
     queryKey: ["recv-dash"],
     queryFn: async () => {
-      const { data } = await api.get<{ data: { status: string }[] }>("/receivables");
+      const { data } = await api.get<{
+        data: { status: string; outstanding: string }[];
+      }>("/receivables");
       return data;
     },
   });
 
-  const openRecv =
-    receivables.data?.data.filter((r) => r.status !== "paid").length ?? "—";
+  const activeRecv = receivables.data?.data.filter((r) => r.status !== "paid") ?? null;
+  const openRecvCount = activeRecv?.length ?? "—";
+  const openRecvTotal = activeRecv
+    ? activeRecv.reduce((sum, r) => sum + Number(r.outstanding), 0)
+    : null;
+
+  const invoiceCount = invoices.data?.data?.length ?? "—";
+  const invoiceTotal = invoices.data?.data
+    ? invoices.data.data.reduce((sum, r) => sum + Number(r.totalAmount), 0)
+    : null;
 
   return (
     <AppShell searchPlaceholder="Cari operasi, aset, atau batch…">
@@ -87,7 +97,7 @@ export default function DashboardPage() {
               </span>
             </div>
           </StatCard>
-          <StatCard label="Belanja hari ini" icon={ShoppingCart} tone="emerald">
+          <StatCard label="Total belanja" icon={ShoppingCart} tone="emerald" footer="Semua waktu">
             {expenseSummary.data ? formatIdr(expenseSummary.data.data.totalExpenses) : "—"}
           </StatCard>
           <StatCard
@@ -96,10 +106,20 @@ export default function DashboardPage() {
             tone="violet"
             footer="Transaksi tercatat"
           >
-            {invoices.data?.data?.length ?? "—"}
+            {invoiceCount}
+            {invoiceTotal !== null && (
+              <p className="mt-0.5 text-base font-semibold tabular-nums text-primary">
+                {formatIdr(invoiceTotal)}
+              </p>
+            )}
           </StatCard>
-          <StatCard label="Piutang aktif" icon={Wallet} tone="amber">
-            {openRecv}
+          <StatCard label="Piutang aktif" icon={Wallet} tone="amber" footer="Piutang belum lunas">
+            {openRecvCount}
+            {openRecvTotal !== null && (
+              <p className="mt-0.5 text-base font-semibold tabular-nums text-destructive">
+                {formatIdr(openRecvTotal)}
+              </p>
+            )}
           </StatCard>
         </div>
       </div>

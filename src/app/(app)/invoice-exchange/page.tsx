@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Pencil, Plus, Printer, Trash2 } from "lucide-react";
+import { Pencil, Plus, Printer, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -64,6 +64,13 @@ export default function InvoiceExchangePage() {
   const qc = useQueryClient();
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  // Filter state
+  const [filterHotelId, setFilterHotelId] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+
+  const hasFilter = !!(filterHotelId || filterDateFrom || filterDateTo);
+
   // Form dialog state
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -84,9 +91,16 @@ export default function InvoiceExchangePage() {
   });
 
   const list = useQuery({
-    queryKey: ["invoice-exchanges"],
+    queryKey: ["invoice-exchanges", filterHotelId, filterDateFrom, filterDateTo],
     queryFn: async () => {
-      const { data } = await api.get<{ data: ExchangeRow[] }>("/invoice-exchanges");
+      const params = new URLSearchParams();
+      if (filterHotelId) params.set("hotelId", filterHotelId);
+      if (filterDateFrom) params.set("dateFrom", filterDateFrom);
+      if (filterDateTo) params.set("dateTo", filterDateTo);
+      const qs = params.toString();
+      const { data } = await api.get<{ data: ExchangeRow[] }>(
+        `/invoice-exchanges${qs ? `?${qs}` : ""}`,
+      );
       return data.data;
     },
   });
@@ -166,7 +180,7 @@ export default function InvoiceExchangePage() {
     onSuccess: (res) => {
       toast.success("Penukaran faktur tersimpan — piutang otomatis dibuat");
       closeDialog();
-      qc.invalidateQueries({ queryKey: ["invoice-exchanges"] });
+      qc.invalidateQueries({ queryKey: ["invoice-exchanges"], exact: false });
       qc.invalidateQueries({ queryKey: ["receivables"] });
       window.open(`/invoice-exchange/${res.data.id}/receipt`, "_blank", "noopener,noreferrer");
     },
@@ -186,7 +200,7 @@ export default function InvoiceExchangePage() {
     onSuccess: () => {
       toast.success("Penukaran faktur berhasil diperbarui");
       closeDialog();
-      qc.invalidateQueries({ queryKey: ["invoice-exchanges"] });
+      qc.invalidateQueries({ queryKey: ["invoice-exchanges"], exact: false });
       qc.invalidateQueries({ queryKey: ["invoice-exchange-detail", editId] });
       qc.invalidateQueries({ queryKey: ["receivables"] });
     },
@@ -200,7 +214,7 @@ export default function InvoiceExchangePage() {
     onSuccess: () => {
       toast.success("Penukaran faktur berhasil dihapus");
       setDeleteTarget(null);
-      qc.invalidateQueries({ queryKey: ["invoice-exchanges"] });
+      qc.invalidateQueries({ queryKey: ["invoice-exchanges"], exact: false });
       qc.invalidateQueries({ queryKey: ["receivables"] });
     },
     onError: (err: unknown) => {
@@ -226,6 +240,96 @@ export default function InvoiceExchangePage() {
             Buat penukaran
           </Button>
         </PageHeader>
+
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/40 px-4 py-3">
+          {/* Hotel */}
+          <div className="min-w-[180px] flex-1 space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Hotel</span>
+            <Select
+              value={filterHotelId || "__all__"}
+              onValueChange={(v) => setFilterHotelId(v === "__all__" ? "" : v)}
+            >
+              <SelectTrigger className="h-9 bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Semua hotel</SelectItem>
+                {(hotels.data ?? []).map((h) => (
+                  <SelectItem key={h.id} value={String(h.id)}>
+                    {h.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Date from */}
+          <div className="min-w-[150px] space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Dari tanggal</span>
+            <div className="relative flex items-center gap-1">
+              <DateField
+                value={filterDateFrom}
+                onChange={setFilterDateFrom}
+                placeholder="Pilih tanggal"
+                className="h-9 flex-1 bg-background"
+              />
+              {filterDateFrom && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => setFilterDateFrom("")}
+                >
+                  <X className="size-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Date to */}
+          <div className="min-w-[150px] space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Sampai tanggal</span>
+            <div className="flex items-center gap-1">
+              <DateField
+                value={filterDateTo}
+                onChange={setFilterDateTo}
+                placeholder="Pilih tanggal"
+                className="h-9 flex-1 bg-background"
+              />
+              {filterDateTo && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => setFilterDateTo("")}
+                >
+                  <X className="size-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Reset */}
+          {hasFilter && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 self-end"
+              onClick={() => {
+                setFilterHotelId("");
+                setFilterDateFrom("");
+                setFilterDateTo("");
+              }}
+            >
+              <X className="mr-1 size-3" />
+              Reset filter
+            </Button>
+          )}
+        </div>
 
         <div className="surface-table-wrap">
           <Table>
