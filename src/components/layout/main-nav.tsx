@@ -15,23 +15,71 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Role yang dikenali di sisi frontend. */
+export type AppRole = "admin" | "user" | "staff";
+
 /** Item menu utama aplikasi — satu sumber untuk sidebar desktop & sheet mobile. */
 export type MainNavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /**
+   * Role yang boleh melihat item ini.
+   * Jika undefined → semua role bisa melihat.
+   */
+  allowedRoles?: AppRole[];
 };
 
+/** Daftar route yang boleh diakses role 'staff'. */
+export const STAFF_ALLOWED_PATHS = ["/expenses", "/stock-barang-jadi"];
+
 export const MAIN_NAV_ITEMS: MainNavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/stock/bahan-baku", label: "Master Data", icon: Package },
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/stock/bahan-baku",
+    label: "Master Data",
+    icon: Package,
+    allowedRoles: ["admin", "user"],
+  },
   { href: "/stock-barang-jadi", label: "Stock barang jadi", icon: Boxes },
   { href: "/expenses", label: "Belanja harian", icon: ShoppingCart },
-  { href: "/penjualan", label: "List Penjualan", icon: Store },
-  { href: "/invoice-exchange", label: "Penukaran faktur", icon: Receipt },
-  { href: "/receivables", label: "Piutang", icon: Wallet },
-  { href: "/reports", label: "Laporan", icon: BarChart3 },
+  {
+    href: "/penjualan",
+    label: "List Penjualan",
+    icon: Store,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/invoice-exchange",
+    label: "Penukaran faktur",
+    icon: Receipt,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/receivables",
+    label: "Piutang",
+    icon: Wallet,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/reports",
+    label: "Laporan",
+    icon: BarChart3,
+    allowedRoles: ["admin", "user"],
+  },
 ];
+
+/** Kembalikan daftar item yang boleh dilihat oleh role tertentu. */
+export function getNavItemsForRole(role: string | undefined): MainNavItem[] {
+  return MAIN_NAV_ITEMS.filter(
+    (item) => !item.allowedRoles || item.allowedRoles.includes(role as AppRole),
+  );
+}
 
 export function isMainNavActive(pathname: string, href: string): boolean {
   if (href === "/stock/bahan-baku") {
@@ -62,14 +110,16 @@ export function MainNavBrand({ className }: MainNavBrandProps) {
 
 type MainNavLinksProps = {
   pathname: string;
+  role?: string;
   /** Dipanggil setelah navigasi (mis. menutup sheet mobile). */
   onNavigate?: () => void;
 };
 
-export function MainNavLinks({ pathname, onNavigate }: MainNavLinksProps) {
+export function MainNavLinks({ pathname, role, onNavigate }: MainNavLinksProps) {
+  const items = getNavItemsForRole(role);
   return (
     <nav className="relative flex flex-1 flex-col gap-1 p-3" aria-label="Menu utama">
-      {MAIN_NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = isMainNavActive(pathname, item.href);
         const Icon = item.icon;
         return (
