@@ -89,13 +89,14 @@ export function RawMaterialsTab({
 
   const create = useMutation({
     mutationFn: async () => {
+      const cpNum = Number(form.costPrice);
       const { data } = await api.post<{ success: boolean; data: RawMaterialRow }>(
         "/raw-materials",
         {
           name: form.name.trim(),
           unitId: form.unitId,
           snackCategoryId: form.snackCategoryId,
-          costPrice: Number(form.costPrice) || 0,
+          ...(Number.isFinite(cpNum) && cpNum > 0 ? { costPrice: cpNum } : {}),
         },
       );
       return data;
@@ -113,12 +114,14 @@ export function RawMaterialsTab({
   const patch = useMutation({
     mutationFn: async () => {
       if (!editRow) return;
+      const cpNum = Number(form.costPrice);
       const { data } = await api.patch<{ success: boolean; data: RawMaterialRow }>(
         `/raw-materials/${editRow.id}`,
         {
           name: form.name.trim(),
           unitId: form.unitId || undefined,
-          costPrice: Number(form.costPrice) || 0,
+          snackCategoryId: form.snackCategoryId || undefined,
+          ...(Number.isFinite(cpNum) ? { costPrice: cpNum } : {}),
         },
       );
       return data;
@@ -150,7 +153,7 @@ export function RawMaterialsTab({
       name: row.name,
       unitId: row.unit.id,
       snackCategoryId: row.snackCategory.id,
-      costPrice: String(Number(row.costPrice)),
+      costPrice: row.costPrice ? String(Number(row.costPrice)) : "0",
     });
     setEditRow(row);
   };
@@ -282,7 +285,7 @@ export function RawMaterialsTab({
                   <span className="text-xs text-slate-500">({row.unit.code})</span>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {formatIdr(row.costPrice)}
+                  {Number(row.costPrice) > 0 ? formatIdr(row.costPrice) : <span className="text-muted-foreground/50">—</span>}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap justify-end gap-1">
@@ -403,13 +406,19 @@ export function RawMaterialsTab({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Harga pokok (Rp)</Label>
+              <Label>
+                Harga pokok (Rp)
+                <span className="ml-1 text-xs font-normal text-muted-foreground">— opsional</span>
+              </Label>
               <Input
                 inputMode="decimal"
                 placeholder="0"
-                value={form.costPrice}
-                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
+                value={form.costPrice === "0" ? "" : form.costPrice}
+                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value || "0" }))}
               />
+              <p className="text-[11px] text-muted-foreground">
+                Dipakai sebagai harga default saat input belanja harian.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -494,12 +503,19 @@ export function RawMaterialsTab({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Harga pokok (Rp)</Label>
+              <Label>
+                Harga pokok (Rp)
+                <span className="ml-1 text-xs font-normal text-muted-foreground">— opsional</span>
+              </Label>
               <Input
                 inputMode="decimal"
-                value={form.costPrice}
-                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
+                placeholder="0"
+                value={form.costPrice === "0" ? "" : form.costPrice}
+                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value || "0" }))}
               />
+              <p className="text-[11px] text-muted-foreground">
+                Dipakai sebagai harga default saat input belanja harian.
+              </p>
             </div>
           </div>
           <DialogFooter>

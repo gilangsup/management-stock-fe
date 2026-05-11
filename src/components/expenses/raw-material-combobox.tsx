@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
+import { formatIdr } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ApiListResponse, RawMaterialRow } from "@/components/inventory/types";
 
@@ -24,6 +25,8 @@ type SearchScope = "__all__" | "name" | "itemCode";
 type Props = {
   value: string;
   onChange: (rawMaterialId: string) => void;
+  /** Dipanggil dengan baris penuh saat user memilih item (termasuk costPrice). */
+  onSelect?: (row: RawMaterialRow) => void;
   disabled?: boolean;
   placeholder?: string;
   id?: string;
@@ -32,6 +35,7 @@ type Props = {
 export function RawMaterialCombobox({
   value,
   onChange,
+  onSelect,
   disabled,
   placeholder = "Pilih bahan baku",
   id,
@@ -199,6 +203,7 @@ export function RawMaterialCombobox({
                       )}
                       onClick={() => {
                         onChange(idStr);
+                        onSelect?.(r);
                         setPicked(r);
                         setOpen(false);
                         setQ("");
@@ -215,6 +220,9 @@ export function RawMaterialCombobox({
                         <span className="block font-medium leading-tight">{r.name}</span>
                         <span className="text-xs text-muted-foreground">
                           {r.itemCode ?? "—"} · {r.unit.name} ({r.unit.code})
+                          {Number(r.costPrice) > 0 && (
+                            <> · <span className="text-primary/80">{formatIdr(r.costPrice)}/{r.unit.code}</span></>
+                          )}
                         </span>
                       </span>
                     </button>

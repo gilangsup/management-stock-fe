@@ -26,12 +26,12 @@ export type RawMaterialRow = {
   id: string;
   itemCode: string | null;
   name: string;
+  /** Harga pokok per satuan (DECIMAL dari server, disimpan sebagai string). */
+  costPrice: string;
   unit: { id: string; code: string; name: string };
   /** Sama sumber master dengan barang jadi — prefix + 3 digit urut per kategori. */
   snackCategory: { id: string; name: string; codePrefix: string };
   categorySeq: number;
-  /** Harga pokok per satuan (DECIMAL dari server, disimpan sebagai string). */
-  costPrice: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -54,6 +54,8 @@ export type FinishedProductStockMovementRow = {
   id: string;
   direction: "in" | "out";
   quantity: number;
+  /** Saldo kumulatif stok setelah transaksi ini (historis, bukan nilai master saat ini). */
+  stockAfter: number;
   productionDate: string | null;
   pickupDate: string | null;
   picName: string;
