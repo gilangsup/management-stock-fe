@@ -178,6 +178,31 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
   );
 
   // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  const updateLine = useCallback(
+    (key: string, patch: Partial<DraftLine>) =>
+      setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l))),
+    [],
+  );
+
+  function resetForm() {
+    setHotelId("");
+    setOrderDate(today);
+    setDeliveryDate("");
+    setPoNumber("");
+    setNotes("");
+    setStatus("draft");
+    setLines([newDraftLine()]);
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next && !isEdit) resetForm();
+    onOpenChange(next);
+  }
+
+  // ---------------------------------------------------------------------------
   // Mutations
   // ---------------------------------------------------------------------------
 
@@ -215,34 +240,12 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
     onSuccess: (res) => {
       toast.success(isEdit ? "Pesanan diperbarui" : "Pesanan disimpan");
       qc.invalidateQueries({ queryKey: ["daily-orders"] });
+      if (!isEdit) resetForm();   // reset dulu sebelum tutup dialog
       onOpenChange(false);
       onSuccess(res.id);
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "Gagal menyimpan pesanan")),
   });
-
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
-
-  const updateLine = useCallback(
-    (key: string, patch: Partial<DraftLine>) =>
-      setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l))),
-    [],
-  );
-
-  function handleOpenChange(next: boolean) {
-    if (!next && !isEdit) {
-      setHotelId("");
-      setOrderDate(today);
-      setDeliveryDate("");
-      setPoNumber("");
-      setNotes("");
-      setStatus("draft");
-      setLines([newDraftLine()]);
-    }
-    onOpenChange(next);
-  }
 
   const canSubmit =
     hotelId &&
@@ -270,7 +273,9 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                 onValueChange={(v) => setHotelId(v ?? "")}
               >
                 <SelectTrigger className="w-full min-w-0">
-                  <SelectValue placeholder="Pilih hotel" />
+                  <SelectValue placeholder="Pilih hotel">
+                    {hotels.data?.find((h) => h.id === hotelId)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(hotels.data ?? []).map((h) => (
@@ -388,7 +393,12 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                           }
                         >
                           <SelectTrigger className="w-full min-w-0">
-                            <SelectValue placeholder="Pilih produk" />
+                            <SelectValue placeholder="Pilih produk">
+                              {(() => {
+                                const p = productMap.get(line.finishedProductId);
+                                return p ? `${p.itemCode} — ${p.name}` : undefined;
+                              })()}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {(products.data ?? []).map((p) => (

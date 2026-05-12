@@ -352,10 +352,40 @@ export default function PesananHarianPage() {
   // Kitchen / vendor view date
   const [viewDate, setViewDate] = useState(today);
 
+  const qc = useQueryClient();
+  const isAdmin = useMemo(() => getStoredUser()?.role === "admin", []);
+
   // ── Dialog state ─────────────────────────────────────────────────────────
   const [formOpen, setFormOpen] = useState(false);
   const [editData, setEditData] = useState<DailyOrderDetail | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [editLoadingId, setEditLoadingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; poNumber: string | null } | null>(null);
+
+  // ── Inline delete mutation ────────────────────────────────────────────────
+  const deleteOrder = useMutation({
+    mutationFn: async (id: string) => api.delete(`/daily-orders/${id}`),
+    onSuccess: () => {
+      toast.success("Pesanan dihapus");
+      qc.invalidateQueries({ queryKey: ["daily-orders"] });
+      setDeleteTarget(null);
+    },
+    onError: (e) => toast.error(getApiErrorMessage(e, "Gagal menghapus pesanan")),
+  });
+
+  // ── Load detail for inline edit ───────────────────────────────────────────
+  async function openEditFromRow(id: string) {
+    setEditLoadingId(id);
+    try {
+      const { data } = await api.get<{ data: DailyOrderDetail }>(`/daily-orders/${id}`);
+      setEditData(data.data);
+      setFormOpen(true);
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "Gagal memuat pesanan"));
+    } finally {
+      setEditLoadingId(null);
+    }
+  }
 
   // ── Hotels query ─────────────────────────────────────────────────────────
   const hotels = useQuery({
@@ -553,7 +583,7 @@ export default function PesananHarianPage() {
                     <TableHead>Tgl Kirim</TableHead>
                     <TableHead className="text-center">Item</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-[120px]" />
+                    <TableHead className="w-[180px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -599,16 +629,47 @@ export default function PesananHarianPage() {
                           <StatusBadge status={order.status} />
                         </TableCell>
                         <TableCell>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
-                            onClick={() => setDetailId(order.id)}
-                          >
-                            <Eye className="mr-1 size-3.5" />
-                            Detail
-                          </Button>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+                              onClick={() => setDetailId(order.id)}
+                            >
+                              <Eye className="mr-1 size-3.5" />
+                              Detail
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-sm"
+                              className="size-8 border-border text-muted-foreground hover:text-foreground"
+                              disabled={editLoadingId === order.id}
+                              onClick={() => openEditFromRow(order.id)}
+                              title="Edit pesanan"
+                            >
+                              {editLoadingId === order.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <Pencil className="size-3.5" />
+                              )}
+                            </Button>
+                            {isAdmin ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon-sm"
+                                className="size-8 border-destructive/30 text-destructive hover:bg-destructive/10"
+                                onClick={() =>
+                                  setDeleteTarget({ id: order.id, poNumber: order.poNumber })
+                                }
+                                title="Hapus pesanan"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -791,11 +852,12 @@ export default function PesananHarianPage() {
       {/* ── Form dialog (create / edit) ─────────────────────────────────────── */}
       <DailyOrderFormDialog
         open={formOpen}
-        onOpenChange={setFormOpen}
-        editData={editData}
-        onSuccess={() => {
-          /* noop: list will refetch via queryClient invalidation */
+        onOpenChange={(v) => {
+          setFormOpen(v);
+          if (!v) setEditData(null);
         }}
+        editData={editData}
+        onSuccess={() => { /* invalidation handled inside dialog */ }}
       />
 
       {/* ── Detail modal ────────────────────────────────────────────────────── */}
@@ -811,6 +873,55 @@ export default function PesananHarianPage() {
         onDeleted={() => setDetailId(null)}
         onInvoiced={(invoiceId) => router.push(`/penjualan/${invoiceId}`)}
       />
+
+      {/* ── Konfirmasi hapus (inline dari tabel) ───────────────────────────── */}
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Hapus pesanan?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {deleteTarget?.poNumber ? (
+              <>
+                Pesanan <strong className="text-foreground">{deleteTarget.poNumber}</strong> dan
+                semua item-nya akan dihapus permanen.
+              </>
+            ) : (
+              "Pesanan dan semua item-nya akan dihapus permanen."
+            )}{" "}
+            Tindakan ini tidak bisa dibatalkan.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleteOrder.isPending}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteOrder.isPending}
+              onClick={() => deleteTarget && deleteOrder.mutate(deleteTarget.id)}
+            >
+              {deleteOrder.isPending ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Menghapus…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 size-4" />
+                  Hapus
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
