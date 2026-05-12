@@ -40,6 +40,7 @@ export type FinishedProductRow = {
   id: string;
   itemCode: string;
   name: string;
+  unit: { id: string; code: string; name: string };
   snackCategory: { id: string; name: string; codePrefix: string };
   categorySeq: number;
   costPrice: string;
