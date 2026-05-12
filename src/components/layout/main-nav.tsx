@@ -6,6 +6,7 @@ import {
   BarChart3,
   Boxes,
   Building2,
+  ClipboardList,
   LayoutDashboard,
   Package,
   Receipt,
@@ -49,6 +50,12 @@ export const MAIN_NAV_ITEMS: MainNavItem[] = [
   { href: "/stock-barang-jadi", label: "Stock barang jadi", icon: Boxes },
   { href: "/expenses", label: "Belanja harian", icon: ShoppingCart },
   {
+    href: "/pesanan-harian",
+    label: "Pesanan harian",
+    icon: ClipboardList,
+    allowedRoles: ["admin", "user"],
+  },
+  {
     href: "/penjualan",
     label: "List Penjualan",
     icon: Store,
@@ -87,6 +94,7 @@ export function isMainNavActive(pathname: string, href: string): boolean {
   }
   if (href === "/stock-barang-jadi") return pathname.startsWith("/stock-barang-jadi");
   if (href === "/penjualan") return pathname.startsWith("/penjualan");
+  if (href === "/pesanan-harian") return pathname.startsWith("/pesanan-harian");
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

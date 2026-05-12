@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, Loader2, Plus, Trash2, X } from "lucide-react";
 import { DateField } from "@/components/forms/date-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +26,7 @@ import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatIdr } from "@/lib/format";
 import { labelForHotelValue } from "@/lib/select-labels";
-import type { HotelFinishedSellPriceRow } from "@/components/inventory/types";
+import type { DailyOrderDetail, HotelFinishedSellPriceRow } from "@/components/inventory/types";
 import type { SalesPreviewLine } from "@/types/sales";
 
 type Hotel = { id: string | number; name: string };
@@ -59,6 +59,7 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
   const [hotelId, setHotelId] = useState("");
   const [saleDate, setSaleDate] = useState(today);
   const [lines, setLines] = useState<DraftLine[]>(() => [newLine()]);
+  const [importOrderId, setImportOrderId] = useState<string | null>(null);
 
   const hotels = useQuery({
     queryKey: ["hotels"],
@@ -68,6 +69,29 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
     },
     enabled: open,
     staleTime: 60_000,
+  });
+
+  // Confirmed daily orders for selected hotel (for import)
+  const confirmedOrders = useQuery({
+    queryKey: ["daily-orders-confirmed", hotelId],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: { id: string; orderDate: string; poNumber: string | null; lineCount: number }[] }>(
+        "/daily-orders",
+        { params: { hotelId, status: "confirmed", limit: 50 } },
+      );
+      return data.data;
+    },
+    enabled: open && Boolean(hotelId),
+    staleTime: 30_000,
+  });
+
+  const importOrderDetail = useQuery({
+    queryKey: ["daily-orders", importOrderId],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: DailyOrderDetail }>(`/daily-orders/${importOrderId}`);
+      return data.data;
+    },
+    enabled: Boolean(importOrderId),
   });
 
   const pricedProducts = useQuery({
@@ -135,10 +159,55 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
     onError: (e) => toast.error(getApiErrorMessage(e, "Gagal menyimpan faktur")),
   });
 
+  // Auto-apply import when detail loads
+  useEffect(() => {
+    if (importOrderId && importOrderDetail.data?.id === importOrderId) {
+      const order = importOrderDetail.data;
+      const importedLines: DraftLine[] = order.lines.map((l) => ({
+        key: crypto.randomUUID(),
+        finishedProductId: l.finishedProductId,
+        preview: null,
+        qty: String(Number(l.qty)),
+      }));
+      setLines(importedLines.length ? importedLines : [newLine()]);
+      for (const l of importedLines) {
+        if (l.finishedProductId && hotelId) {
+          void loadPreview(l.key, hotelId, l.finishedProductId);
+        }
+      }
+      setImportOrderId(null);
+      toast.success(`${order.lines.length} item diimpor dari pesanan ${order.poNumber ?? order.id}`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run only when detail loads
+  }, [importOrderDetail.data]);
+
+  // When import order detail loads, pre-fill lines
+  const handleImportOrder = useCallback(
+    (order: DailyOrderDetail) => {
+      const importedLines: DraftLine[] = order.lines.map((l) => ({
+        key: crypto.randomUUID(),
+        finishedProductId: l.finishedProductId,
+        preview: null,
+        qty: String(Number(l.qty)),
+      }));
+      setLines(importedLines.length ? importedLines : [newLine()]);
+      // Trigger preview load for each imported line
+      for (const l of importedLines) {
+        if (l.finishedProductId && hotelId) {
+          void loadPreview(l.key, hotelId, l.finishedProductId);
+        }
+      }
+      setImportOrderId(null);
+      toast.success(`${order.lines.length} item diimpor dari pesanan ${order.poNumber ?? order.id}`);
+    },
+    [hotelId, loadPreview],
+  );
+
   function resetForm() {
     setHotelId("");
     setSaleDate(today);
     setLines([newLine()]);
+    setImportOrderId(null);
   }
 
   function handleOpenChange(next: boolean) {
@@ -205,6 +274,57 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
               <DateField value={saleDate} onChange={setSaleDate} />
             </div>
           </div>
+
+          {/* ── Import dari Pesanan Harian ─────────────────────────────── */}
+          {hotelId && (confirmedOrders.data?.length ?? 0) > 0 ? (
+            <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <ClipboardList className="size-4 text-primary shrink-0" />
+                  <span className="font-medium text-primary">Import dari Pesanan Harian</span>
+                  <span className="text-muted-foreground">
+                    ({confirmedOrders.data?.length} confirmed tersedia)
+                  </span>
+                </div>
+                {importOrderId ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-6"
+                    onClick={() => setImportOrderId(null)}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                ) : null}
+              </div>
+              {!importOrderId ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(confirmedOrders.data ?? []).map((o) => (
+                    <Button
+                      key={o.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 border-primary/30 bg-white text-xs"
+                      onClick={() => {
+                        setImportOrderId(o.id);
+                        if (importOrderDetail.data?.id === o.id) {
+                          handleImportOrder(importOrderDetail.data);
+                        }
+                      }}
+                    >
+                      {o.poNumber ?? `Pesanan ${o.id}`} — {o.lineCount} item
+                    </Button>
+                  ))}
+                </div>
+              ) : importOrderDetail.isLoading ? (
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" /> Mengimpor…
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
