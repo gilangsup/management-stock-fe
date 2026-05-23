@@ -33,6 +33,7 @@ import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatIdr, formatIntegerQty } from "@/lib/format";
 import { labelForSnackCategoryValue } from "@/lib/select-labels";
+import { useInventoryMasters } from "./use-inventory-masters";
 import type { ApiListResponse, FinishedProductRow, SnackCategoryRow } from "./types";
 
 const PAGE_SIZE = 15;
@@ -45,6 +46,8 @@ type Props = {
 
 export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: Props) {
   const qc = useQueryClient();
+  const { units } = useInventoryMasters();
+  const unitRows = units.data?.data ?? [];
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("");
@@ -56,6 +59,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
   const [form, setForm] = useState({
     name: "",
     snackCategoryId: "",
+    unitId: "",
     costPrice: "0",
   });
 
@@ -85,6 +89,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
         {
           name: form.name.trim(),
           snackCategoryId: form.snackCategoryId,
+          unitId: form.unitId || undefined,
           costPrice: Number(form.costPrice) || 0,
         },
       );
@@ -93,7 +98,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
     onSuccess: () => {
       toast.success("Barang jadi ditambahkan");
       setCreateOpen(false);
-      setForm({ name: "", snackCategoryId: "", costPrice: "0" });
+      setForm({ name: "", snackCategoryId: "", unitId: "", costPrice: "0" });
       qc.invalidateQueries({ queryKey: ["finished-products"] });
       qc.invalidateQueries({ queryKey: ["dash-inventory"] });
       qc.invalidateQueries({ queryKey: ["hotel-sell-prices"] });
@@ -109,6 +114,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
         {
           name: form.name.trim(),
           snackCategoryId: form.snackCategoryId || undefined,
+          unitId: form.unitId || undefined,
           costPrice: Number(form.costPrice),
         },
       );
@@ -141,15 +147,19 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
     setForm({
       name: row.name,
       snackCategoryId: row.snackCategory.id,
+      unitId: row.unit?.id ? String(row.unit.id) : "",
       costPrice: String(Number(row.costPrice)),
     });
     setEditRow(row);
   };
 
+  const defaultUnitId = unitRows.find((u) => u.code === "pcs")?.id ?? unitRows[0]?.id ?? "";
+
   const firstCatId = categories?.[0]?.id ?? "";
   const canSubmitCreate =
     form.name.trim() &&
     form.snackCategoryId &&
+    (form.unitId || defaultUnitId) &&
     !create.isPending &&
     !categoriesLoading &&
     !!categories?.length;
@@ -217,6 +227,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
               setForm({
                 name: "",
                 snackCategoryId: firstCatId,
+                unitId: defaultUnitId,
                 costPrice: "0",
               });
               setCreateOpen(true);
@@ -247,6 +258,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
               <TableHead>Kode</TableHead>
               <TableHead>Nama</TableHead>
               <TableHead>Kategori</TableHead>
+              <TableHead>Satuan</TableHead>
               <TableHead className="text-right">Stok</TableHead>
               <TableHead className="text-right">Harga pokok</TableHead>
               <TableHead className="w-[140px]" />
@@ -267,6 +279,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
                     Prefix {row.snackCategory.codePrefix}
                   </div>
                 </TableCell>
+                <TableCell className="text-sm">{row.unit?.code ?? "—"}</TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatIntegerQty(row.stockQuantity)}
                 </TableCell>
@@ -299,7 +312,7 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
             ))}
             {!list.data?.data?.length && (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                   {list.isLoading ? "Memuat…" : "Belum ada barang jadi."}
                 </TableCell>
               </TableRow>
@@ -372,6 +385,24 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
               </Select>
             </div>
             <div className="space-y-2">
+              <Label>Satuan</Label>
+              <Select
+                value={form.unitId ? String(form.unitId) : defaultUnitId || undefined}
+                onValueChange={(v) => setForm((f) => ({ ...f, unitId: v ?? "" }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih satuan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unitRows.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.code} — {u.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label>Harga pokok (Rp)</Label>
               <Input
                 inputMode="decimal"
@@ -432,6 +463,24 @@ export function FinishedProductsTab({ isAdmin, categories, categoriesLoading }: 
                   {(categories ?? []).map((c) => (
                     <SelectItem key={c.id} value={String(c.id)}>
                       {c.name} ({c.codePrefix})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Satuan</Label>
+              <Select
+                value={form.unitId ? String(form.unitId) : defaultUnitId || undefined}
+                onValueChange={(v) => setForm((f) => ({ ...f, unitId: v ?? "" }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih satuan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unitRows.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.code} — {u.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

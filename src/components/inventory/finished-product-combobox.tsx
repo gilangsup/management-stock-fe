@@ -15,6 +15,8 @@ const PAGE_LIMIT = 50;
 type Props = {
   value: string;
   onChange: (finishedProductId: string) => void;
+  /** Dipanggil saat produk dipilih — berguna untuk mengisi satuan default. */
+  onProductSelect?: (product: FinishedProductRow | null) => void;
   disabled?: boolean;
   placeholder?: string;
   id?: string;
@@ -25,6 +27,7 @@ type Props = {
 export function FinishedProductCombobox({
   value,
   onChange,
+  onProductSelect,
   disabled,
   placeholder = "Pilih barang jadi",
   id,
@@ -41,8 +44,11 @@ export function FinishedProductCombobox({
   }, [q]);
 
   useEffect(() => {
-    if (!value) setPicked(null);
-  }, [value]);
+    if (!value) {
+      setPicked(null);
+      onProductSelect?.(null);
+    }
+  }, [value, onProductSelect]);
 
   const listQuery = useQuery({
     queryKey: ["finished-products", "combobox-search", debouncedQ],
@@ -163,6 +169,7 @@ export function FinishedProductCombobox({
                       onClick={() => {
                         onChange(idStr);
                         setPicked(r);
+                        onProductSelect?.(r);
                         setOpen(false);
                         setQ("");
                         setDebouncedQ("");
@@ -178,6 +185,7 @@ export function FinishedProductCombobox({
                         <span className="block font-medium leading-tight">{r.name}</span>
                         <span className="text-xs text-muted-foreground">
                           {r.itemCode} · {r.snackCategory.name}
+                          {r.unit?.code ? ` · ${r.unit.code}` : ""}
                           {showStock ? ` · stok ${stockOf(r)}` : ""}
                         </span>
                       </span>

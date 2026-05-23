@@ -59,6 +59,8 @@ export type FinishedProductStockMovementRow = {
   stockAfter: number;
   productionDate: string | null;
   pickupDate: string | null;
+  /** Keterangan / penanggung jawab (alias picName). */
+  keterangan: string;
   picName: string;
   createdAt: string;
   finishedProduct: {

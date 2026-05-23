@@ -86,7 +86,7 @@ export default function PenjualanDetailPage() {
       <div className={pageStackNarrow}>
         <PageHeader
           title={`Faktur ${d.transactionCode}`}
-          description="Detail penjualan barang jadi ke hotel — cetak Bon dari tombol di bawah."
+          description="Detail penjualan barang jadi ke hotel — cetak faktur penjualan dari tombol di bawah."
         >
           <Link
             href="/penjualan"
@@ -108,7 +108,7 @@ export default function PenjualanDetailPage() {
             )}
           >
             <Printer className="mr-2 size-4" />
-            Cetak Bon
+            Cetak Faktur Penjualan
           </Link>
         </PageHeader>
 

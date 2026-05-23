@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppProviders } from "@/providers/app-providers";
+import { APP_TITLE } from "@/lib/brand";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Executive Architect — Manajemen stok",
-  description: "Stok, pengeluaran, penukaran faktur, dan piutang",
+  title: APP_TITLE,
+  description: "Stok, pengeluaran, penukaran faktur, dan piutang — SOKA FROZEN FOOD",
 };
 
 export const viewport = {

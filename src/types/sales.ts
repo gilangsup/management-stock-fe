@@ -40,7 +40,9 @@ export type SalesInvoiceDetail = {
   hotelId: string;
   hotelCode?: string | null;
   hotelName: string;
+  hotelAddress?: string | null;
   grandTotal: string;
+  createdAt?: string;
   lines: SalesInvoiceLine[];
 };
 

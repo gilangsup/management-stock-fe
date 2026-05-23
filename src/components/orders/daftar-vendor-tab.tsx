@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback } from "react";
 import { Loader2, ShoppingBag } from "lucide-react";
 import { DateField } from "@/components/forms/date-field";
 import {
@@ -13,103 +13,84 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { escapeHtml, printHtmlDocument } from "@/lib/export-utils";
 import { formatDate } from "@/lib/format";
-import type { DailyOrderDetail, DailyOrderListItem } from "@/components/inventory/types";
+import { OrderExportActions } from "@/components/orders/order-export-actions";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type VendorAggregate = {
+type VendorSummaryLine = {
   finishedProductId: string;
   productName: string;
   itemCode: string;
-  unit: string;
-  totalQty: number;
+  unitCode: string;
+  totalQty: string;
 };
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
 
 type Props = {
   viewDate: string;
   onViewDateChange: (date: string) => void;
 };
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
-  const orderListQuery = useQuery({
-    queryKey: ["daily-orders", "view", viewDate],
+  const summaryQuery = useQuery({
+    queryKey: ["daily-orders", "vendor-summary", viewDate],
     queryFn: async () => {
-      const { data } = await api.get<{ data: DailyOrderListItem[] }>("/daily-orders", {
-        params: { from: viewDate, to: viewDate, status: "confirmed", limit: 100 },
-      });
+      const { data } = await api.get<{ data: VendorSummaryLine[] }>(
+        "/daily-orders/summary/vendor",
+        { params: { date: viewDate } },
+      );
       return data.data;
     },
   });
 
-  const orderDetailQuery = useQuery({
-    queryKey: ["daily-orders", "view-detail", viewDate],
-    queryFn: async () => {
-      const list = orderListQuery.data ?? [];
-      const details = await Promise.all(
-        list.map(async (o) => {
-          const { data } = await api.get<{ data: DailyOrderDetail }>(`/daily-orders/${o.id}`);
-          return data.data;
-        }),
-      );
-      return details;
-    },
-    enabled: Boolean(orderListQuery.data?.length),
-  });
+  const vendorLines = summaryQuery.data ?? [];
 
-  // Aggregate vendor items by product
-  const vendorLines = useMemo<VendorAggregate[]>(() => {
-    if (!orderDetailQuery.data) return [];
-    const map = new Map<string, VendorAggregate>();
-    for (const order of orderDetailQuery.data) {
-      for (const l of order.lines.filter((l) => l.source === "vendor")) {
-        const existing = map.get(l.finishedProductId);
-        if (existing) {
-          existing.totalQty += Number(l.qty);
-        } else {
-          map.set(l.finishedProductId, {
-            finishedProductId: l.finishedProductId,
-            productName: l.productName,
-            itemCode: l.itemCode ?? "",
-            unit: l.unit.code,
-            totalQty: Number(l.qty),
-          });
-        }
-      }
-    }
-    return Array.from(map.values()).sort((a, b) =>
-      a.productName.localeCompare(b.productName),
+  const printPdf = useCallback(() => {
+    const rows = vendorLines
+      .map(
+        (l, i) =>
+          `<tr>
+            <td>${i + 1}</td>
+            <td>${escapeHtml(l.productName)}</td>
+            <td>${escapeHtml(l.itemCode)}</td>
+            <td class="text-right">${Number(l.totalQty).toLocaleString("id-ID")}</td>
+            <td>${escapeHtml(l.unitCode)}</td>
+          </tr>`,
+      )
+      .join("");
+
+    printHtmlDocument(
+      `Beli Vendor ${viewDate}`,
+      `<h1>Daftar Beli Vendor</h1>
+       <p class="meta">Tanggal PO: ${escapeHtml(formatDate(viewDate))} · ${vendorLines.length} produk</p>
+       <table>
+         <thead><tr><th>#</th><th>Produk</th><th>Kode</th><th class="text-right">Total Qty</th><th>Satuan</th></tr></thead>
+         <tbody>${rows}</tbody>
+       </table>`,
     );
-  }, [orderDetailQuery.data]);
-
-  const isLoading = orderListQuery.isLoading || orderDetailQuery.isLoading;
+  }, [vendorLines, viewDate]);
 
   return (
     <div className="space-y-4">
-      {/* Filter */}
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Tanggal PO</p>
-          <DateField value={viewDate} onChange={onViewDateChange} />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Tanggal PO</p>
+            <DateField value={viewDate} onChange={onViewDateChange} />
+          </div>
+          <p className="pb-1 text-xs text-muted-foreground max-w-md">
+            Rekap item <strong>vendor</strong> dari semua pesanan confirmed pada tanggal PO tersebut —
+            dikelompokkan per produk.
+          </p>
         </div>
-        <p className="pb-1 text-xs text-muted-foreground">
-          Rekap item <strong>vendor</strong> dari semua pesanan confirmed pada tanggal PO tersebut —
-          dikelompokkan per produk.
-        </p>
+        <OrderExportActions
+          date={viewDate}
+          kind="vendor"
+          disabled={!vendorLines.length || summaryQuery.isLoading}
+          onPrintPdf={printPdf}
+        />
       </div>
 
-      {/* Content */}
-      {isLoading ? (
+      {summaryQuery.isLoading ? (
         <div className="flex items-center gap-2 py-8 text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> Memuat…
         </div>
@@ -141,9 +122,9 @@ export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
                     {l.itemCode}
                   </TableCell>
                   <TableCell className="text-right font-bold tabular-nums text-base">
-                    {l.totalQty.toLocaleString("id-ID")}
+                    {Number(l.totalQty).toLocaleString("id-ID")}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{l.unit}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{l.unitCode}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

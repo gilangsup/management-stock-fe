@@ -14,6 +14,7 @@ import {
   Store,
   Wallet,
 } from "lucide-react";
+import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 /** Role yang dikenali di sisi frontend. */
@@ -108,9 +109,9 @@ export function MainNavBrand({ className }: MainNavBrandProps) {
       </div>
       <div>
         <p className="text-sm font-semibold leading-tight text-sidebar-foreground">
-          Executive Architect
+          {APP_NAME}
         </p>
-        <p className="text-xs text-sidebar-foreground/70">Operasi bisnis</p>
+        <p className="text-xs text-sidebar-foreground/70">{APP_TAGLINE}</p>
       </div>
     </div>
   );
