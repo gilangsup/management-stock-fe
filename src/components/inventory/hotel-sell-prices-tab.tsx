@@ -41,6 +41,7 @@ type Hotel = {
   id: string;
   name: string;
   hotelCode?: string;
+  ptName?: string | null;
   address?: string | null;
   city?: string | null;
   phone?: string | null;
@@ -48,13 +49,14 @@ type Hotel = {
 
 type HotelFormState = {
   name: string;
+  ptName: string;
   address: string;
   city: string;
   phone: string;
 };
 
 function emptyForm(): HotelFormState {
-  return { name: "", address: "", city: "", phone: "" };
+  return { name: "", ptName: "", address: "", city: "", phone: "" };
 }
 
 type Props = { isAdmin: boolean };
@@ -294,6 +296,7 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
     mutationFn: async () => {
       const { data } = await api.post<{ data: Hotel }>("/hotels", {
         name: createForm.name.trim(),
+        ptName: createForm.ptName.trim() || undefined,
         address: createForm.address.trim() || undefined,
         city: createForm.city.trim() || undefined,
         phone: createForm.phone.trim() || undefined,
@@ -315,6 +318,7 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
       if (!editTarget) return;
       await api.patch(`/hotels/${editTarget.id}`, {
         name: editForm.name.trim() || undefined,
+        ptName: editForm.ptName.trim() || undefined,
         address: editForm.address.trim() || undefined,
         city: editForm.city.trim() || undefined,
         phone: editForm.phone.trim() || undefined,
@@ -378,6 +382,7 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
     setEditTarget(h);
     setEditForm({
       name: h.name,
+      ptName: h.ptName ?? "",
       address: h.address ?? "",
       city: h.city ?? "",
       phone: h.phone ?? "",
@@ -450,6 +455,13 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
                     </Button>
                   </div>
 
+                  {h.ptName && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Building2 className="size-3 shrink-0" />
+                      <span className="font-medium text-slate-600 dark:text-slate-400">{h.ptName}</span>
+                    </div>
+                  )}
+
                   {(h.address || h.city) && (
                     <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
                       <MapPin className="mt-0.5 size-3 shrink-0" />
@@ -487,13 +499,24 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
               <Input
                 value={createForm.name}
                 onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Contoh: Hotel Bahari"
+                placeholder="Contoh: Aloft Hotel"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && createForm.name.trim() && !createHotel.isPending) {
                     e.preventDefault();
                     createHotel.mutate();
                   }
                 }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                Nama PT / perusahaan{" "}
+                <span className="text-xs font-normal text-muted-foreground">(muncul di kwitansi)</span>
+              </Label>
+              <Input
+                value={createForm.ptName}
+                onChange={(e) => setCreateForm((f) => ({ ...f, ptName: e.target.value }))}
+                placeholder="Contoh: PT. Aloha International Hotel"
               />
             </div>
             <div className="space-y-1.5">
@@ -554,6 +577,17 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
               <Input
                 value={editForm.name}
                 onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                Nama PT / perusahaan{" "}
+                <span className="text-xs font-normal text-muted-foreground">(muncul di kwitansi)</span>
+              </Label>
+              <Input
+                value={editForm.ptName}
+                onChange={(e) => setEditForm((f) => ({ ...f, ptName: e.target.value }))}
+                placeholder="Contoh: PT. Aloha International Hotel"
               />
             </div>
             <div className="space-y-1.5">

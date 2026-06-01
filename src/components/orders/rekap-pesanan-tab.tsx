@@ -101,69 +101,139 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
   // ── PDF export ────────────────────────────────────────────────────────────
   const [pdfLoading, setPdfLoading] = useState(false);
 
+  type RekapSummaryLine = {
+    hotelId: string;
+    hotelName: string;
+    hotelCode: string;
+    deliverySlot: string;
+    productName: string;
+    unitCode: string;
+    totalQty: number;
+  };
+
+  /** Label pendek untuk header slot di PDF (sesuai gambar: "CB 1", "CB 2", …) */
+  const SLOT_SHORT: Record<string, string> = {
+    CB1: "CB 1",
+    CB2: "CB 2",
+    CB3: "CB 3",
+    unspecified: "Lainnya",
+  };
+  const SLOT_ORDER = ["CB1", "CB2", "CB3", "unspecified"];
+
   const handleDownloadPdf = useCallback(async () => {
     setPdfLoading(true);
     try {
-      const params: Record<string, string | number> = { page: 1, limit: 1000 };
+      const params: Record<string, string> = {};
       if (hotelFilter !== FILTER_ALL) params.hotelId = hotelFilter;
       if (dateFrom) params.from = dateFrom;
       if (dateTo) params.to = dateTo;
       if (statusFilter !== FILTER_ALL) params.status = statusFilter;
 
-      const { data } = await api.get<{ data: DailyOrderListItem[]; meta?: { total: number } }>(
-        "/daily-orders",
+      const { data } = await api.get<{ success: boolean; data: RekapSummaryLine[] }>(
+        "/daily-orders/summary/rekap",
         { params },
       );
-      const allRows = data.data ?? [];
+      const lines = data.data ?? [];
 
-      const hotelName =
+      if (lines.length === 0) {
+        toast.info("Tidak ada data untuk filter ini.");
+        return;
+      }
+
+      // Kelompokkan per hotel → per slot
+      type SlotGroup = { products: RekapSummaryLine[] };
+      type HotelGroup = { hotelName: string; slots: Map<string, SlotGroup> };
+
+      const hotelMap = new Map<string, HotelGroup>();
+      for (const line of lines) {
+        if (!hotelMap.has(line.hotelId)) {
+          hotelMap.set(line.hotelId, { hotelName: line.hotelName, slots: new Map() });
+        }
+        const hotel = hotelMap.get(line.hotelId)!;
+        if (!hotel.slots.has(line.deliverySlot)) {
+          hotel.slots.set(line.deliverySlot, { products: [] });
+        }
+        hotel.slots.get(line.deliverySlot)!.products.push(line);
+      }
+
+      // Info filter untuk header PDF
+      const filterMeta = [
+        dateFrom
+          ? `Tanggal PO: ${escapeHtml(formatDate(dateFrom))}${dateTo && dateTo !== dateFrom ? ` s.d. ${escapeHtml(formatDate(dateTo))}` : ""}`
+          : "",
         hotelFilter !== FILTER_ALL
-          ? (hotels.data?.find((h) => h.id === hotelFilter)?.name ?? hotelFilter)
-          : "Semua hotel";
-      const statusName =
-        statusFilter !== FILTER_ALL ? (STATUS_LABEL[statusFilter] ?? statusFilter) : "Semua status";
+          ? escapeHtml(hotels.data?.find((h) => h.id === hotelFilter)?.name ?? hotelFilter)
+          : "Semua hotel",
+        statusFilter !== FILTER_ALL
+          ? escapeHtml(STATUS_LABEL[statusFilter] ?? statusFilter)
+          : "Semua status",
+      ]
+        .filter(Boolean)
+        .join(" · ");
 
-      const filterLines = [
-        `Hotel: <strong>${escapeHtml(hotelName)}</strong>`,
-        `Tanggal pengiriman: <strong>${dateFrom ? escapeHtml(formatDate(dateFrom)) : "—"}</strong> s.d. <strong>${dateTo ? escapeHtml(formatDate(dateTo)) : "—"}</strong>`,
-        `Status: <strong>${escapeHtml(statusName)}</strong>`,
-        `Total: <strong>${allRows.length} pesanan</strong>`,
-      ].join(" &nbsp;·&nbsp; ");
+      // Bangun blok HTML per hotel
+      const hotelBlocks = Array.from(hotelMap.values())
+        .map((hotel) => {
+          const slotBlocks = SLOT_ORDER.filter((s) => hotel.slots.has(s))
+            .map((slot) => {
+              const { products } = hotel.slots.get(slot)!;
+              const rows = products
+                .map(
+                  (p, i) =>
+                    `<tr>
+                      <td class="col-no text-right">${i + 1}</td>
+                      <td>${escapeHtml(p.productName)}</td>
+                      <td class="col-qty text-right">${Number(p.totalQty).toLocaleString("id-ID")} ${escapeHtml(p.unitCode)}</td>
+                    </tr>`,
+                )
+                .join("");
+              return `<div class="slot-section">
+                <p class="slot-header">${escapeHtml(SLOT_SHORT[slot] ?? slot)}</p>
+                <table>
+                  <thead>
+                    <tr>
+                      <th class="col-no text-right">NO</th>
+                      <th>PRODUK</th>
+                      <th class="col-qty text-right">QTY</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>`;
+            })
+            .join("");
 
-      const tableRows = allRows
-        .map(
-          (o, i) =>
-            `<tr>
-              <td class="text-right">${i + 1}</td>
-              <td>${escapeHtml(o.hotel.name)}</td>
-              <td>${o.deliveryDate ? escapeHtml(formatDate(o.deliveryDate)) : "—"}</td>
-              <td class="mono">${o.poNumber ? escapeHtml(o.poNumber) : "—"}</td>
-              <td class="text-right">${o.lineCount}</td>
-              <td>${escapeHtml(STATUS_LABEL[o.status] ?? o.status)}</td>
-            </tr>`,
-        )
+          return `<div class="hotel-block">
+            <p class="hotel-header">HOTEL : ${escapeHtml(hotel.hotelName)}</p>
+            ${slotBlocks}
+          </div>`;
+        })
         .join("");
 
+      const extraCss = `
+        .hotel-block { margin-bottom: 28px; page-break-inside: avoid; }
+        .hotel-header {
+          font-size: 15px; font-weight: 800; text-transform: uppercase;
+          margin: 0 0 10px; padding-bottom: 6px;
+          border-bottom: 2.5px solid #111; letter-spacing: 0.03em;
+        }
+        .slot-section { margin-top: 10px; }
+        .slot-header {
+          font-size: 14px; font-weight: 700; color: #bb0000;
+          margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .col-no { width: 36px; }
+        .col-qty { width: 72px; }
+        table { margin-top: 0; }
+        th { text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+      `;
+
       const body = `
+        <style>${extraCss}</style>
         <h1>Rekap Pesanan Harian</h1>
-        <p class="meta">${filterLines}</p>
-        ${
-          allRows.length === 0
-            ? `<p class="meta" style="margin-top:1rem">Tidak ada data pesanan pada filter ini.</p>`
-            : `<table>
-                <thead>
-                  <tr>
-                    <th class="text-right">#</th>
-                    <th>Hotel</th>
-                    <th>Tgl Pengiriman</th>
-                    <th>No. PO</th>
-                    <th class="text-right">Item</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>${tableRows}</tbody>
-              </table>`
-        }`;
+        <p class="meta">${filterMeta}</p>
+        ${hotelBlocks}
+      `;
 
       printHtmlDocument("Rekap Pesanan Harian", body);
     } catch {
@@ -171,6 +241,7 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
     } finally {
       setPdfLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotelFilter, dateFrom, dateTo, statusFilter, hotels.data]);
 
   return (
@@ -196,12 +267,12 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium">Tanggal pengiriman dari</p>
+          <p className="text-sm font-medium">Tanggal PO dari</p>
           <DateField value={dateFrom} onChange={(v) => { setDateFrom(v); setPage(1); }} />
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium">Tanggal pengiriman sampai</p>
+          <p className="text-sm font-medium">Tanggal PO sampai</p>
           <DateField value={dateTo} onChange={(v) => { setDateTo(v); setPage(1); }} />
         </div>
 
@@ -246,9 +317,10 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Tgl Pengiriman</TableHead>
+              <TableHead>Tanggal PO</TableHead>
               <TableHead>Hotel</TableHead>
               <TableHead>No. PO</TableHead>
+              <TableHead>Tgl Kirim</TableHead>
               <TableHead className="text-center">Item</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[180px]" />
@@ -257,35 +329,36 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
           <TableBody>
             {listQuery.isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                   Memuat…
                 </TableCell>
               </TableRow>
             ) : listQuery.isError ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-destructive text-sm">
+                <TableCell colSpan={7} className="h-24 text-center text-destructive text-sm">
                   Gagal memuat data pesanan.
                 </TableCell>
               </TableRow>
             ) : !rows.length ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
                   Belum ada pesanan pada rentang ini.
                 </TableCell>
               </TableRow>
             ) : (
               rows.map((order) => (
                 <TableRow key={order.id}>
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium">{formatDate(order.orderDate)}</TableCell>
+                  <TableCell>{order.hotel.name}</TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {order.poNumber ?? <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell>
                     {order.deliveryDate ? (
                       formatDate(order.deliveryDate)
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
-                  </TableCell>
-                  <TableCell>{order.hotel.name}</TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {order.poNumber ?? <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-center">
                     <Badge variant="secondary">{order.lineCount}</Badge>

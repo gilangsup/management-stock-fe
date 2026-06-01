@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Pencil, Plus, Printer, Trash2, X } from "lucide-react";
+import { CheckSquare2, Loader2, Pencil, Plus, Printer, Square, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -76,15 +76,18 @@ export default function InvoiceExchangePage() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
 
-  // Sales transaction selection (create mode only)
-  const [selectedSalesTxnId, setSelectedSalesTxnId] = useState<string>("");
-  const [salesDetailLoading, setSalesDetailLoading] = useState(false);
+  // Sales transaction multi-selection (create mode only)
+  const [selectedTxnIds, setSelectedTxnIds] = useState<string[]>([]);
+  // Cache: txnId → lines derived from that transaction
+  const [txnLinesCache, setTxnLinesCache] = useState<Record<string, Line[]>>({});
+  const [loadingTxnIds, setLoadingTxnIds] = useState<Set<string>>(new Set());
+  // Lines added manually by user on top of auto-filled transaction lines
+  const [manualLines, setManualLines] = useState<Line[]>([]);
 
   // Form fields
   const [hotelId, setHotelId] = useState<string>("");
   const [exchangeDate, setExchangeDate] = useState(today);
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ description: "", amount: "" }]);
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<ExchangeRow | null>(null);
@@ -97,7 +100,7 @@ export default function InvoiceExchangePage() {
     },
   });
 
-  // Fetch transaksi penjualan untuk hotel yang dipilih (create mode saja)
+  // Fetch daftar transaksi penjualan untuk hotel yang dipilih (create mode saja)
   const salesTransactions = useQuery({
     queryKey: ["sales-transactions-for-exchange", hotelId],
     queryFn: async () => {
@@ -109,6 +112,22 @@ export default function InvoiceExchangePage() {
     enabled: open && !editId && !!hotelId,
     staleTime: 30_000,
   });
+
+  // Computed: auto-lines dari semua transaksi yang dipilih
+  const autoLines = useMemo<Line[]>(
+    () =>
+      selectedTxnIds.flatMap(
+        (id) =>
+          txnLinesCache[id] ?? [],
+      ),
+    [selectedTxnIds, txnLinesCache],
+  );
+
+  // Total semua lines (auto + manual)
+  const lines = useMemo<Line[]>(
+    () => [...autoLines, ...manualLines],
+    [autoLines, manualLines],
+  );
 
   const list = useQuery({
     queryKey: ["invoice-exchanges", filterHotelId, filterDateFrom, filterDateTo],
@@ -139,7 +158,7 @@ export default function InvoiceExchangePage() {
       setHotelId(editQuery.data.hotelId);
       setExchangeDate(editQuery.data.exchangeDate);
       setNotes(editQuery.data.notes ?? "");
-      setLines(
+      setManualLines(
         editQuery.data.lines.map((l) => ({
           description: l.description,
           amount: String(Number(l.amount)),
@@ -148,66 +167,101 @@ export default function InvoiceExchangePage() {
     }
   }, [editId, editQuery.data]);
 
-  async function onSalesTransactionSelect(txnId: string) {
-    setSelectedSalesTxnId(txnId);
-    if (!txnId) return;
-    setSalesDetailLoading(true);
-    try {
-      const { data } = await api.get<{ data: SalesInvoiceDetail }>(
-        `/sales-transactions/${txnId}`,
-      );
-      const detail = data.data;
-      setExchangeDate(detail.saleDate);
-      setNotes("");
-      setLines(
-        detail.lines.map((l) => ({
-          description: `${salesLineProductName(l)} (${Number(l.qty)} ${l.unit.code})`,
-          amount: String(Number(l.lineTotal)),
-        })),
-      );
-    } catch {
-      toast.error("Gagal memuat detail transaksi");
-    } finally {
-      setSalesDetailLoading(false);
-    }
-  }
+  const toggleTransaction = useCallback(
+    async (txnId: string) => {
+      const isSelected = selectedTxnIds.includes(txnId);
+
+      if (isSelected) {
+        // Deselect: hapus dari daftar dan cache
+        setSelectedTxnIds((ids) => ids.filter((id) => id !== txnId));
+        setTxnLinesCache((c) => {
+          const next = { ...c };
+          delete next[txnId];
+          return next;
+        });
+        return;
+      }
+
+      // Select: fetch detail jika belum di-cache
+      if (!txnLinesCache[txnId]) {
+        setLoadingTxnIds((s) => new Set(s).add(txnId));
+        try {
+          const { data } = await api.get<{ data: SalesInvoiceDetail }>(
+            `/sales-transactions/${txnId}`,
+          );
+          const detail = data.data;
+          const newLines: Line[] = detail.lines.map((l) => ({
+            description: `${salesLineProductName(l)} (${Number(l.qty)} ${l.unit.code})`,
+            amount: String(Number(l.lineTotal)),
+          }));
+          setTxnLinesCache((c) => ({ ...c, [txnId]: newLines }));
+          // Set tanggal dari transaksi pertama yang dipilih
+          if (selectedTxnIds.length === 0) {
+            setExchangeDate(detail.saleDate);
+          }
+        } catch {
+          toast.error("Gagal memuat detail transaksi");
+          setLoadingTxnIds((s) => {
+            const next = new Set(s);
+            next.delete(txnId);
+            return next;
+          });
+          return;
+        } finally {
+          setLoadingTxnIds((s) => {
+            const next = new Set(s);
+            next.delete(txnId);
+            return next;
+          });
+        }
+      }
+
+      setSelectedTxnIds((ids) => [...ids, txnId]);
+    },
+    [selectedTxnIds, txnLinesCache],
+  );
 
   function onCreateHotelChange(v: string) {
     setHotelId(v);
     // Reset transaksi ketika hotel berubah
-    setSelectedSalesTxnId("");
+    setSelectedTxnIds([]);
+    setTxnLinesCache({});
+    setManualLines([]);
     setExchangeDate(today);
-    setLines([{ description: "", amount: "" }]);
   }
 
   function openCreate() {
     setEditId(null);
-    setSelectedSalesTxnId("");
+    setSelectedTxnIds([]);
+    setTxnLinesCache({});
+    setManualLines([]);
     setHotelId("");
     setExchangeDate(today);
     setNotes("");
-    setLines([{ description: "", amount: "" }]);
     setOpen(true);
   }
 
   function openEdit(row: ExchangeRow) {
     setEditId(row.id);
-    setSelectedSalesTxnId("");
+    setSelectedTxnIds([]);
+    setTxnLinesCache({});
+    setManualLines([]);
     setHotelId("");
     setExchangeDate(today);
     setNotes("");
-    setLines([{ description: "", amount: "" }]);
     setOpen(true);
   }
 
   function closeDialog() {
     setOpen(false);
     setEditId(null);
-    setSelectedSalesTxnId("");
+    setSelectedTxnIds([]);
+    setTxnLinesCache({});
+    setManualLines([]);
   }
 
-  function handleAmountChange(i: number, v: string) {
-    setLines((ls) =>
+  function handleManualAmountChange(i: number, v: string) {
+    setManualLines((ls) =>
       ls.map((x, j) => {
         if (j !== i) return x;
         const prevTerbilang = x.amount ? terbilang(x.amount) : "";
@@ -220,7 +274,7 @@ export default function InvoiceExchangePage() {
 
   const validLines = lines.filter((l) => l.description.trim() && Number(l.amount) > 0);
   const isCreateMode = !editId;
-  const canSubmitCreate = !!selectedSalesTxnId && !!hotelId && validLines.length > 0;
+  const canSubmitCreate = selectedTxnIds.length > 0 && !!hotelId && validLines.length > 0;
   const canSubmitEdit = !!hotelId && validLines.length > 0;
   const canSubmit = isCreateMode ? canSubmitCreate : canSubmitEdit;
 
@@ -477,46 +531,63 @@ export default function InvoiceExchangePage() {
                     </Select>
                   </div>
 
-                  {/* Step 2: Pilih transaksi (muncul setelah hotel dipilih) */}
+                  {/* Step 2: Pilih transaksi (muncul setelah hotel dipilih) — multi-select */}
                   {hotelId && (
                     <div className="space-y-2">
-                      <Label>
-                        Transaksi penjualan <span className="text-destructive">*</span>
-                      </Label>
+                      <div className="flex items-center justify-between">
+                        <Label>
+                          Transaksi penjualan <span className="text-destructive">*</span>
+                        </Label>
+                        {selectedTxnIds.length > 0 && (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                            {selectedTxnIds.length} dipilih
+                          </span>
+                        )}
+                      </div>
                       {salesTransactions.isLoading ? (
                         <p className="text-sm text-muted-foreground">Memuat transaksi…</p>
-                      ) : (
-                        <Select
-                          value={selectedSalesTxnId || undefined}
-                          onValueChange={(v) => v && onSalesTransactionSelect(v)}
-                        >
-                          <SelectTrigger className={!selectedSalesTxnId ? "border-dashed" : ""}>
-                            <SelectValue placeholder="Pilih transaksi penjualan…" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-64">
-                            {(salesTransactions.data ?? []).map((t) => (
-                              <SelectItem key={t.id} value={t.id}>
-                                <span className="font-mono text-xs text-primary">{t.transactionCode}</span>
-                                <span className="ml-2 text-muted-foreground">
-                                  {formatDate(t.saleDate)} · {formatIdr(t.grandTotal)}
-                                </span>
-                              </SelectItem>
-                            ))}
-                            {!salesTransactions.data?.length && (
-                              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                                Tidak ada transaksi untuk hotel ini.
-                              </div>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      )}
-                      {!selectedSalesTxnId && (
-                        <p className="text-xs text-muted-foreground">
-                          Pilih transaksi untuk mengisi otomatis tanggal dan baris nominal.
+                      ) : !salesTransactions.data?.length ? (
+                        <p className="rounded border border-dashed px-3 py-3 text-center text-sm text-muted-foreground">
+                          Tidak ada transaksi untuk hotel ini.
                         </p>
+                      ) : (
+                        <div className="max-h-52 overflow-y-auto rounded-md border divide-y">
+                          {(salesTransactions.data ?? []).map((t) => {
+                            const checked = selectedTxnIds.includes(t.id);
+                            const loading = loadingTxnIds.has(t.id);
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+                                onClick={() => toggleTransaction(t.id)}
+                                disabled={loading}
+                              >
+                                {loading ? (
+                                  <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                                ) : checked ? (
+                                  <CheckSquare2 className="size-4 shrink-0 text-primary" />
+                                ) : (
+                                  <Square className="size-4 shrink-0 text-muted-foreground" />
+                                )}
+                                <span className="font-mono text-xs font-semibold text-primary">
+                                  {t.transactionCode}
+                                </span>
+                                <span className="flex-1 text-xs text-muted-foreground">
+                                  {formatDate(t.saleDate)}
+                                </span>
+                                <span className="text-xs font-medium tabular-nums">
+                                  {formatIdr(t.grandTotal)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
-                      {salesDetailLoading && (
-                        <p className="text-xs text-primary">Memuat detail transaksi…</p>
+                      {selectedTxnIds.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Centang satu atau lebih transaksi. Baris nominal akan terisi otomatis.
+                        </p>
                       )}
                     </div>
                   )}
@@ -547,10 +618,9 @@ export default function InvoiceExchangePage() {
                 </div>
               )}
 
-              {/* Show rest of form after transaction is selected (create) or always in edit */}
-              {(!!selectedSalesTxnId || !!editId) && formReady && (
+              {/* Show rest of form after hotel + ≥1 transaksi dipilih (create) or always in edit */}
+              {(selectedTxnIds.length > 0 || !!editId) && formReady && (
                 <>
-
                   <div className="space-y-2">
                     <Label>Tanggal</Label>
                     <DateField value={exchangeDate} onChange={setExchangeDate} />
@@ -561,51 +631,90 @@ export default function InvoiceExchangePage() {
                     <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
                   </div>
 
+                  {/* Preview baris dari transaksi (auto) */}
+                  {autoLines.length > 0 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
+                        Baris dari transaksi terpilih ({autoLines.length} baris)
+                      </Label>
+                      <div className="max-h-40 overflow-y-auto space-y-1 rounded-md border bg-muted/30 p-2">
+                        {autoLines.map((line, i) => (
+                          <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                            <span className="flex-1 truncate text-muted-foreground">{line.description}</span>
+                            <span className="shrink-0 tabular-nums font-medium">{formatIdr(line.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Baris manual tambahan */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label>Baris nominal</Label>
+                      <Label>Baris nominal tambahan</Label>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => setLines((ls) => [...ls, { description: "", amount: "" }])}
+                        onClick={() => setManualLines((ls) => [...ls, { description: "", amount: "" }])}
                       >
                         <Plus className="mr-1 size-3" />
-                        Baris
+                        Tambah baris
                       </Button>
                     </div>
-                    <div className="space-y-2">
-                      {lines.map((line, i) => (
-                        <div key={i} className="flex gap-2">
-                          <Input
-                            className="flex-1"
-                            placeholder="Keterangan"
-                            value={line.description}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setLines((ls) => ls.map((x, j) => (j === i ? { ...x, description: v } : x)));
-                            }}
-                          />
-                          <Input
-                            className="w-32"
-                            inputMode="decimal"
-                            placeholder="Nominal"
-                            value={line.amount}
-                            onChange={(e) => handleAmountChange(i, e.target.value)}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            disabled={lines.length <= 1}
-                            onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
+                    {manualLines.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {isCreateMode
+                          ? "Opsional — tambah baris di luar transaksi jika diperlukan."
+                          : "Tidak ada baris tambahan."}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {manualLines.map((line, i) => (
+                          <div key={i} className="flex gap-2">
+                            <Input
+                              className="flex-1"
+                              placeholder="Keterangan"
+                              value={line.description}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setManualLines((ls) =>
+                                  ls.map((x, j) => (j === i ? { ...x, description: v } : x)),
+                                );
+                              }}
+                            />
+                            <Input
+                              className="w-32"
+                              inputMode="decimal"
+                              placeholder="Nominal"
+                              value={line.amount}
+                              onChange={(e) => handleManualAmountChange(i, e.target.value)}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setManualLines((ls) => ls.filter((_, j) => j !== i))}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Total preview */}
+                  {validLines.length > 0 && (
+                    <div className="flex items-center justify-between rounded-lg bg-primary/5 px-3 py-2 text-sm font-semibold">
+                      <span className="text-muted-foreground">Total kwitansi</span>
+                      <span className="text-primary">
+                        {formatIdr(
+                          String(validLines.reduce((s, l) => s + Number(l.amount), 0)),
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </>
               )}
             </div>

@@ -91,7 +91,7 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
     printHtmlDocument(
       `Instruksi Dapur ${viewDate}`,
       `<h1>Instruksi Dapur</h1>
-       <p class="meta">Tanggal pengiriman: ${escapeHtml(formatDate(viewDate))} · ${kitchenLines.length} item</p>
+       <p class="meta">Tanggal PO: ${escapeHtml(formatDate(viewDate))} · ${kitchenLines.length} item</p>
        ${sections}`,
     );
   }, [bySlot, kitchenLines.length, viewDate]);
@@ -101,11 +101,11 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">
-            <p className="text-sm font-medium">Tanggal pengiriman</p>
+            <p className="text-sm font-medium">Tanggal PO</p>
             <DateField value={viewDate} onChange={onViewDateChange} />
           </div>
           <p className="pb-1 text-xs text-muted-foreground max-w-md">
-            Menampilkan semua pesanan <strong>confirmed</strong> pada tanggal pengiriman tersebut —
+            Menampilkan semua pesanan <strong>confirmed</strong> pada tanggal PO tersebut —
             item yang dibuat sendiri, dikelompokkan per jam pengiriman.
           </p>
         </div>
@@ -127,7 +127,7 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
           <p className="text-sm text-muted-foreground">
             Tidak ada instruksi dapur untuk <strong>{formatDate(viewDate)}</strong>.
             <br />
-            Pastikan ada pesanan confirmed pada tanggal pengiriman ini.
+            Pastikan ada pesanan confirmed pada tanggal PO ini.
           </p>
         </div>
       ) : (

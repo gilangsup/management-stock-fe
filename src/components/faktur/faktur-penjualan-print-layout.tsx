@@ -46,6 +46,13 @@ export function FakturPenjualanPrintLayout({ data }: Props) {
               <span>:</span>
               <span>{data.transactionCode}</span>
             </div>
+            {data.poNumber && (
+              <div className="faktur-info-row">
+                <span>No PO</span>
+                <span>:</span>
+                <span>{data.poNumber}</span>
+              </div>
+            )}
             <div className="faktur-info-row">
               <span>Tanggal</span>
               <span>:</span>
@@ -196,8 +203,8 @@ export function FakturPenjualanPrintLayout({ data }: Props) {
         }
 
         .faktur-logo {
-          width: 64px;
-          height: 64px;
+          width: 96px;
+          height: 96px;
           object-fit: contain;
           flex-shrink: 0;
         }

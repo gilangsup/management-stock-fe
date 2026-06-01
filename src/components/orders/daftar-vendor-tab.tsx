@@ -61,7 +61,7 @@ export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
     printHtmlDocument(
       `Beli Vendor ${viewDate}`,
       `<h1>Daftar Beli Vendor</h1>
-       <p class="meta">Tanggal pengiriman: ${escapeHtml(formatDate(viewDate))} · ${vendorLines.length} produk</p>
+       <p class="meta">Tanggal PO: ${escapeHtml(formatDate(viewDate))} · ${vendorLines.length} produk</p>
        <table>
          <thead><tr><th>#</th><th>Produk</th><th>Kode</th><th class="text-right">Total Qty</th><th>Satuan</th></tr></thead>
          <tbody>${rows}</tbody>
@@ -74,11 +74,11 @@ export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">
-            <p className="text-sm font-medium">Tanggal pengiriman</p>
+            <p className="text-sm font-medium">Tanggal PO</p>
             <DateField value={viewDate} onChange={onViewDateChange} />
           </div>
           <p className="pb-1 text-xs text-muted-foreground max-w-md">
-            Rekap item <strong>vendor</strong> dari semua pesanan confirmed pada tanggal pengiriman tersebut —
+            Rekap item <strong>vendor</strong> dari semua pesanan confirmed pada tanggal PO tersebut —
             dikelompokkan per produk.
           </p>
         </div>

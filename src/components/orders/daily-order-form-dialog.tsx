@@ -109,10 +109,8 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
   const isEdit = Boolean(editData);
 
   const [hotelId, setHotelId] = useState(editData?.hotel.id ?? "");
-  // Tanggal pengiriman adalah tanggal utama; orderDate dikirim sama nilainya ke backend
-  const [deliveryDate, setDeliveryDate] = useState(
-    editData?.deliveryDate ?? editData?.orderDate ?? today,
-  );
+  const [orderDate, setOrderDate] = useState(editData?.orderDate ?? today);
+  const [deliveryDate, setDeliveryDate] = useState(editData?.deliveryDate ?? "");
   const [poNumber, setPoNumber] = useState(editData?.poNumber ?? "");
   const [notes, setNotes] = useState(editData?.notes ?? "");
   const [status, setStatus] = useState<OrderStatus>(editData?.status ?? "draft");
@@ -124,7 +122,8 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
   useEffect(() => {
     if (open && editData) {
       setHotelId(editData.hotel.id);
-      setDeliveryDate(editData.deliveryDate ?? editData.orderDate ?? today);
+      setOrderDate(editData.orderDate);
+      setDeliveryDate(editData.deliveryDate ?? "");
       setPoNumber(editData.poNumber ?? "");
       setNotes(editData.notes ?? "");
       setStatus(editData.status);
@@ -228,7 +227,8 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
 
   function resetForm() {
     setHotelId("");
-    setDeliveryDate(today);
+    setOrderDate(today);
+    setDeliveryDate("");
     setPoNumber("");
     setNotes("");
     setStatus("draft");
@@ -247,8 +247,8 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
   const save = useMutation({
     mutationFn: async () => {
       const body = {
-        orderDate: deliveryDate,   // orderDate = deliveryDate; Tanggal PO dihapus dari UI
-        deliveryDate,
+        orderDate,
+        deliveryDate: deliveryDate || undefined,
         hotelId,
         poNumber: poNumber || undefined,
         notes: notes || undefined,
@@ -295,7 +295,7 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
 
   const canSubmit =
     hotelId &&
-    deliveryDate &&
+    orderDate &&
     lines.some((l) => l.finishedProductId && Number(l.qty) > 0);
 
   // ---------------------------------------------------------------------------
@@ -334,8 +334,13 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
             </div>
 
             <div className="space-y-2">
-              <Label>Tanggal pengiriman <span className="text-destructive">*</span></Label>
-              <DateField value={deliveryDate} onChange={setDeliveryDate} />
+              <Label>Tanggal PO / pesanan <span className="text-destructive">*</span></Label>
+              <DateField value={orderDate} onChange={setOrderDate} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tanggal pengiriman</Label>
+              <DateField value={deliveryDate} onChange={setDeliveryDate} placeholder="Opsional" />
             </div>
 
             <div className="space-y-2">
@@ -527,7 +532,7 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
 
           {/* ── Grand total ─────────────────────────────────────────────────── */}
           <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
-            <span className="text-muted-foreground">Total (preview dari harga master)</span>
+            <span className="text-muted-foreground">Total PO (preview)</span>
             <span className="font-bold tabular-nums text-base">{formatIdr(grandTotal)}</span>
           </div>
         </div>
