@@ -97,15 +97,16 @@ export default function InvoiceExchangePage() {
     },
   });
 
+  // Fetch transaksi penjualan untuk hotel yang dipilih (create mode saja)
   const salesTransactions = useQuery({
-    queryKey: ["sales-transactions-for-exchange"],
+    queryKey: ["sales-transactions-for-exchange", hotelId],
     queryFn: async () => {
       const { data } = await api.get<{ data: SalesInvoiceListItem[] }>("/sales-transactions", {
-        params: { limit: 500, page: 1 },
+        params: { limit: 500, page: 1, hotelId },
       });
       return data.data;
     },
-    enabled: open && !editId,
+    enabled: open && !editId && !!hotelId,
     staleTime: 30_000,
   });
 
@@ -156,7 +157,6 @@ export default function InvoiceExchangePage() {
         `/sales-transactions/${txnId}`,
       );
       const detail = data.data;
-      setHotelId(detail.hotelId);
       setExchangeDate(detail.saleDate);
       setNotes("");
       setLines(
@@ -170,6 +170,14 @@ export default function InvoiceExchangePage() {
     } finally {
       setSalesDetailLoading(false);
     }
+  }
+
+  function onCreateHotelChange(v: string) {
+    setHotelId(v);
+    // Reset transaksi ketika hotel berubah
+    setSelectedSalesTxnId("");
+    setExchangeDate(today);
+    setLines([{ description: "", amount: "" }]);
   }
 
   function openCreate() {
@@ -442,79 +450,106 @@ export default function InvoiceExchangePage() {
             <div className="py-8 text-center text-sm text-muted-foreground">Memuat data…</div>
           ) : (
             <div className="grid gap-4 py-2">
-              {/* Sales transaction picker — create mode only */}
+              {/* ── Create mode: Hotel dulu, baru transaksi ── */}
               {!editId && (
-                <div className="space-y-2">
-                  <Label>
-                    Transaksi penjualan <span className="text-destructive">*</span>
-                  </Label>
-                  {salesTransactions.isLoading ? (
-                    <p className="text-sm text-muted-foreground">Memuat daftar transaksi…</p>
-                  ) : (
+                <>
+                  {/* Step 1: Pilih hotel */}
+                  <div className="space-y-2">
+                    <Label>
+                      Hotel <span className="text-destructive">*</span>
+                    </Label>
                     <Select
-                      value={selectedSalesTxnId || undefined}
-                      onValueChange={(v) => v && onSalesTransactionSelect(v)}
+                      value={hotelId || undefined}
+                      onValueChange={(v) => v && onCreateHotelChange(v)}
                     >
-                      <SelectTrigger className={!selectedSalesTxnId ? "border-dashed" : ""}>
-                        <SelectValue placeholder="Pilih transaksi penjualan…" />
+                      <SelectTrigger className={!hotelId ? "border-dashed" : ""}>
+                        <SelectValue placeholder="Pilih hotel…">
+                          {(val) => labelForHotelValue(hotels.data, val) ?? undefined}
+                        </SelectValue>
                       </SelectTrigger>
-                      <SelectContent className="max-h-64">
-                        {(salesTransactions.data ?? []).map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            <span className="font-mono text-xs text-primary">{t.transactionCode}</span>
-                            <span className="ml-2 text-muted-foreground">
-                              {t.hotelName} · {formatDate(t.saleDate)} · {formatIdr(t.grandTotal)}
-                            </span>
+                      <SelectContent>
+                        {(hotels.data ?? []).map((h) => (
+                          <SelectItem key={h.id} value={String(h.id)}>
+                            {h.name}
                           </SelectItem>
                         ))}
-                        {!salesTransactions.data?.length && (
-                          <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                            Belum ada transaksi penjualan.
-                          </div>
-                        )}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Step 2: Pilih transaksi (muncul setelah hotel dipilih) */}
+                  {hotelId && (
+                    <div className="space-y-2">
+                      <Label>
+                        Transaksi penjualan <span className="text-destructive">*</span>
+                      </Label>
+                      {salesTransactions.isLoading ? (
+                        <p className="text-sm text-muted-foreground">Memuat transaksi…</p>
+                      ) : (
+                        <Select
+                          value={selectedSalesTxnId || undefined}
+                          onValueChange={(v) => v && onSalesTransactionSelect(v)}
+                        >
+                          <SelectTrigger className={!selectedSalesTxnId ? "border-dashed" : ""}>
+                            <SelectValue placeholder="Pilih transaksi penjualan…" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64">
+                            {(salesTransactions.data ?? []).map((t) => (
+                              <SelectItem key={t.id} value={t.id}>
+                                <span className="font-mono text-xs text-primary">{t.transactionCode}</span>
+                                <span className="ml-2 text-muted-foreground">
+                                  {formatDate(t.saleDate)} · {formatIdr(t.grandTotal)}
+                                </span>
+                              </SelectItem>
+                            ))}
+                            {!salesTransactions.data?.length && (
+                              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                                Tidak ada transaksi untuk hotel ini.
+                              </div>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {!selectedSalesTxnId && (
+                        <p className="text-xs text-muted-foreground">
+                          Pilih transaksi untuk mengisi otomatis tanggal dan baris nominal.
+                        </p>
+                      )}
+                      {salesDetailLoading && (
+                        <p className="text-xs text-primary">Memuat detail transaksi…</p>
+                      )}
+                    </div>
                   )}
-                  {!selectedSalesTxnId && (
-                    <p className="text-xs text-muted-foreground">
-                      Pilih transaksi penjualan untuk mengisi otomatis hotel, tanggal, dan baris nominal.
-                    </p>
-                  )}
-                  {salesDetailLoading && (
-                    <p className="text-xs text-primary">Memuat detail transaksi…</p>
-                  )}
+                </>
+              )}
+
+              {/* Edit mode: hotel selector */}
+              {!!editId && formReady && (
+                <div className="space-y-2">
+                  <Label>Hotel</Label>
+                  <Select
+                    value={hotelId ? String(hotelId) : undefined}
+                    onValueChange={(v) => setHotelId(v ?? "")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih hotel">
+                        {(val) => labelForHotelValue(hotels.data, val) ?? undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(hotels.data ?? []).map((h) => (
+                        <SelectItem key={h.id} value={String(h.id)}>
+                          {h.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
               {/* Show rest of form after transaction is selected (create) or always in edit */}
               {(!!selectedSalesTxnId || !!editId) && formReady && (
                 <>
-                  <div className="space-y-2">
-                    <Label>Hotel</Label>
-                    {!editId ? (
-                      <div className="flex h-10 items-center rounded-md border bg-muted/50 px-3 text-sm font-medium">
-                        {labelForHotelValue(hotels.data, hotelId) ?? hotelId}
-                      </div>
-                    ) : (
-                      <Select
-                        value={hotelId ? String(hotelId) : undefined}
-                        onValueChange={(v) => setHotelId(v ?? "")}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih hotel">
-                            {(val) => labelForHotelValue(hotels.data, val) ?? undefined}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(hotels.data ?? []).map((h) => (
-                            <SelectItem key={h.id} value={String(h.id)}>
-                              {h.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
 
                   <div className="space-y-2">
                     <Label>Tanggal</Label>
