@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Building2, Lock, Mail } from "lucide-react";
+import { Lock, Mail } from "lucide-react";
+import Image from "next/image";
+import logoSoka from "@/assets/logo_soka.png";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -57,11 +59,11 @@ export default function LoginPage() {
       />
 
       <div className="relative mb-10 flex items-center gap-4 text-white">
-        <div className="flex size-14 items-center justify-center rounded-2xl bg-white/12 ring-1 ring-white/20 backdrop-blur-sm">
-          <Building2 className="size-7" />
+        <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-white p-1.5 ring-1 ring-white/20 shadow-lg">
+          <Image src={logoSoka} alt="Soka Frozen" width={52} height={52} className="object-contain" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight drop-shadow-sm">Executive Architect</h1>
+          <h1 className="text-2xl font-bold tracking-tight drop-shadow-sm">Soka Frozen</h1>
           <p className="text-sm font-medium text-white/85">Manajemen stok</p>
         </div>
       </div>

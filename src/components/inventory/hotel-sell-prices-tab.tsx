@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Save, Trash2 } from "lucide-react";
+import { Building2, MapPin, Pencil, Phone, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -36,7 +36,25 @@ import { formatIdr, formatMarginPercent } from "@/lib/format";
 import { labelForHotelValue } from "@/lib/select-labels";
 import type { HotelFinishedSellPriceRow } from "./types";
 
-type Hotel = { id: string; name: string; address?: string | null };
+type Hotel = {
+  id: string;
+  name: string;
+  hotelCode?: string;
+  address?: string | null;
+  city?: string | null;
+  phone?: string | null;
+};
+
+type HotelFormState = {
+  name: string;
+  address: string;
+  city: string;
+  phone: string;
+};
+
+function emptyForm(): HotelFormState {
+  return { name: "", address: "", city: "", phone: "" };
+}
 
 type Props = { isAdmin: boolean };
 
@@ -249,8 +267,14 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
   const [hotelId, setHotelId] = useState("");
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
-  const [hotelDialogOpen, setHotelDialogOpen] = useState(false);
-  const [newHotelName, setNewHotelName] = useState("");
+
+  // Create dialog
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<HotelFormState>(emptyForm());
+
+  // Edit dialog
+  const [editTarget, setEditTarget] = useState<Hotel | null>(null);
+  const [editForm, setEditForm] = useState<HotelFormState>(emptyForm());
 
   const hotels = useQuery({
     queryKey: ["hotels"],
@@ -263,18 +287,51 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
 
   const createHotel = useMutation({
     mutationFn: async () => {
-      const { data } = await api.post<{ data: Hotel }>("/hotels", { name: newHotelName.trim() });
+      const { data } = await api.post<{ data: Hotel }>("/hotels", {
+        name: createForm.name.trim(),
+        address: createForm.address.trim() || undefined,
+        city: createForm.city.trim() || undefined,
+        phone: createForm.phone.trim() || undefined,
+      });
       return data.data;
     },
     onSuccess: (h) => {
       toast.success("Hotel ditambahkan");
-      setHotelDialogOpen(false);
-      setNewHotelName("");
+      setCreateOpen(false);
+      setCreateForm(emptyForm());
       setHotelId(h.id);
       qc.invalidateQueries({ queryKey: ["hotels"] });
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "Gagal menyimpan hotel")),
   });
+
+  const updateHotel = useMutation({
+    mutationFn: async () => {
+      if (!editTarget) return;
+      await api.patch(`/hotels/${editTarget.id}`, {
+        name: editForm.name.trim() || undefined,
+        address: editForm.address.trim() || undefined,
+        city: editForm.city.trim() || undefined,
+        phone: editForm.phone.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Data hotel diperbarui");
+      setEditTarget(null);
+      qc.invalidateQueries({ queryKey: ["hotels"] });
+    },
+    onError: (e) => toast.error(getApiErrorMessage(e, "Gagal memperbarui hotel")),
+  });
+
+  function openEdit(h: Hotel) {
+    setEditTarget(h);
+    setEditForm({
+      name: h.name,
+      address: h.address ?? "",
+      city: h.city ?? "",
+      phone: h.phone ?? "",
+    });
+  }
 
   const hotelsList = hotels.data ?? [];
   const firstHotelId = hotelsList[0]?.id ?? "";
@@ -282,8 +339,9 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Master hotel — card grid */}
       <Card className="border-border bg-card shadow-sm">
-        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0 pb-2">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0 pb-4">
           <div>
             <CardTitle className="text-lg">Master hotel</CardTitle>
             <CardDescription>
@@ -295,42 +353,76 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
             type="button"
             variant="outline"
             className="border-primary/30 bg-primary/5 hover:bg-primary/10"
-            onClick={() => setHotelDialogOpen(true)}
+            onClick={() => setCreateOpen(true)}
           >
             <Plus className="mr-2 size-4" />
             Tambah hotel
           </Button>
         </CardHeader>
-        <CardContent className="px-0 pb-4 pt-0">
-          <div className="surface-table-wrap border-t border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nama hotel</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {hotelsList.map((h) => (
-                  <TableRow key={h.id}>
-                    <TableCell className="font-medium text-slate-800 dark:text-slate-100">
-                      {h.name}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!hotelsList.length && (
-                  <TableRow>
-                    <TableCell className="h-16 text-center text-muted-foreground">
-                      {hotels.isLoading ? "Memuat…" : "Belum ada hotel — gunakan Tambah hotel."}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+        <CardContent>
+          {!hotelsList.length ? (
+            <p className="rounded-lg border border-dashed border-primary/30 bg-muted/40 px-4 py-6 text-center text-sm text-muted-foreground">
+              {hotels.isLoading ? "Memuat…" : "Belum ada hotel — gunakan Tambah hotel."}
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {hotelsList.map((h) => (
+                <div
+                  key={h.id}
+                  className="group relative flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-4 transition-shadow hover:shadow-md"
+                >
+                  {/* Hotel code badge */}
+                  {h.hotelCode && (
+                    <span className="self-start rounded-full bg-primary/10 px-2 py-0.5 font-mono text-[10px] font-semibold tracking-wider text-primary">
+                      {h.hotelCode}
+                    </span>
+                  )}
+
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                        <Building2 className="size-4 text-primary" />
+                      </div>
+                      <p className="font-semibold leading-tight text-slate-800 dark:text-slate-100">
+                        {h.name}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                      onClick={() => openEdit(h)}
+                      title="Edit hotel"
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                  </div>
+
+                  {(h.address || h.city) && (
+                    <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <MapPin className="mt-0.5 size-3 shrink-0" />
+                      <span className="line-clamp-2">
+                        {[h.address, h.city].filter(Boolean).join(", ")}
+                      </span>
+                    </div>
+                  )}
+
+                  {h.phone && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Phone className="size-3 shrink-0" />
+                      <span>{h.phone}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <Dialog open={hotelDialogOpen} onOpenChange={setHotelDialogOpen}>
+      {/* Create hotel dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Hotel baru</DialogTitle>
@@ -338,29 +430,56 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
               Nama akan muncul di daftar hotel dan bisa dipilih saat penukaran faktur.
             </p>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="new-hotel-name">Nama hotel</Label>
-            <Input
-              id="new-hotel-name"
-              value={newHotelName}
-              onChange={(e) => setNewHotelName(e.target.value)}
-              placeholder="Contoh: Hotel Bahari"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newHotelName.trim() && !createHotel.isPending) {
-                  e.preventDefault();
-                  createHotel.mutate();
-                }
-              }}
-            />
+          <div className="grid gap-3 py-2">
+            <div className="space-y-1.5">
+              <Label>Nama hotel <span className="text-destructive">*</span></Label>
+              <Input
+                value={createForm.name}
+                onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Contoh: Hotel Bahari"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && createForm.name.trim() && !createHotel.isPending) {
+                    e.preventDefault();
+                    createHotel.mutate();
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Alamat <span className="text-xs font-normal text-muted-foreground">(opsional)</span></Label>
+              <Input
+                value={createForm.address}
+                onChange={(e) => setCreateForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="Jl. Contoh No. 1"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Kota <span className="text-xs font-normal text-muted-foreground">(opsional)</span></Label>
+                <Input
+                  value={createForm.city}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, city: e.target.value }))}
+                  placeholder="Jakarta"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Telepon <span className="text-xs font-normal text-muted-foreground">(opsional)</span></Label>
+                <Input
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="021-xxxxxxx"
+                />
+              </div>
+            </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setHotelDialogOpen(false)}>
+            <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
               Batal
             </Button>
             <Button
               type="button"
               className="btn-gradient border-0"
-              disabled={!newHotelName.trim() || createHotel.isPending}
+              disabled={!createForm.name.trim() || createHotel.isPending}
               onClick={() => createHotel.mutate()}
             >
               Simpan
@@ -369,6 +488,67 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
         </DialogContent>
       </Dialog>
 
+      {/* Edit hotel dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit hotel</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Kode hotel ({editTarget?.hotelCode}) tidak dapat diubah.
+            </p>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="space-y-1.5">
+              <Label>Nama hotel</Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Alamat <span className="text-xs font-normal text-muted-foreground">(opsional)</span></Label>
+              <Input
+                value={editForm.address}
+                onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="Jl. Contoh No. 1"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Kota</Label>
+                <Input
+                  value={editForm.city}
+                  onChange={(e) => setEditForm((f) => ({ ...f, city: e.target.value }))}
+                  placeholder="Jakarta"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Telepon</Label>
+                <Input
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="021-xxxxxxx"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setEditTarget(null)}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              className="btn-gradient border-0"
+              disabled={!editForm.name.trim() || updateHotel.isPending}
+              onClick={() => updateHotel.mutate()}
+            >
+              Simpan perubahan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sell prices section */}
       <div>
         <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
           Harga jual per barang

@@ -39,6 +39,8 @@ import { api } from "@/lib/api";
 import { formatDate, formatIdr, terbilang } from "@/lib/format";
 import { labelForHotelValue } from "@/lib/select-labels";
 import { cn } from "@/lib/utils";
+import type { SalesInvoiceDetail, SalesInvoiceListItem } from "@/types/sales";
+import { salesLineProductName } from "@/types/sales";
 
 type Hotel = { id: string; name: string };
 type Line = { description: string; amount: string };
@@ -68,18 +70,23 @@ export default function InvoiceExchangePage() {
   const [filterHotelId, setFilterHotelId] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
-
   const hasFilter = !!(filterHotelId || filterDateFrom || filterDateTo);
 
   // Form dialog state
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+
+  // Sales transaction selection (create mode only)
+  const [selectedSalesTxnId, setSelectedSalesTxnId] = useState<string>("");
+  const [salesDetailLoading, setSalesDetailLoading] = useState(false);
+
+  // Form fields
   const [hotelId, setHotelId] = useState<string>("");
   const [exchangeDate, setExchangeDate] = useState(today);
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<Line[]>([{ description: "", amount: "" }]);
 
-  // Delete confirmation dialog state
+  // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<ExchangeRow | null>(null);
 
   const hotels = useQuery({
@@ -88,6 +95,18 @@ export default function InvoiceExchangePage() {
       const { data } = await api.get<{ data: Hotel[] }>("/hotels");
       return data.data;
     },
+  });
+
+  const salesTransactions = useQuery({
+    queryKey: ["sales-transactions-for-exchange"],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: SalesInvoiceListItem[] }>("/sales-transactions", {
+        params: { limit: 500, page: 1 },
+      });
+      return data.data;
+    },
+    enabled: open && !editId,
+    staleTime: 30_000,
   });
 
   const list = useQuery({
@@ -128,8 +147,34 @@ export default function InvoiceExchangePage() {
     }
   }, [editId, editQuery.data]);
 
+  async function onSalesTransactionSelect(txnId: string) {
+    setSelectedSalesTxnId(txnId);
+    if (!txnId) return;
+    setSalesDetailLoading(true);
+    try {
+      const { data } = await api.get<{ data: SalesInvoiceDetail }>(
+        `/sales-transactions/${txnId}`,
+      );
+      const detail = data.data;
+      setHotelId(detail.hotelId);
+      setExchangeDate(detail.saleDate);
+      setNotes("");
+      setLines(
+        detail.lines.map((l) => ({
+          description: `${salesLineProductName(l)} (${Number(l.qty)} ${l.unit.code})`,
+          amount: String(Number(l.lineTotal)),
+        })),
+      );
+    } catch {
+      toast.error("Gagal memuat detail transaksi");
+    } finally {
+      setSalesDetailLoading(false);
+    }
+  }
+
   function openCreate() {
     setEditId(null);
+    setSelectedSalesTxnId("");
     setHotelId("");
     setExchangeDate(today);
     setNotes("");
@@ -139,6 +184,7 @@ export default function InvoiceExchangePage() {
 
   function openEdit(row: ExchangeRow) {
     setEditId(row.id);
+    setSelectedSalesTxnId("");
     setHotelId("");
     setExchangeDate(today);
     setNotes("");
@@ -149,6 +195,7 @@ export default function InvoiceExchangePage() {
   function closeDialog() {
     setOpen(false);
     setEditId(null);
+    setSelectedSalesTxnId("");
   }
 
   function handleAmountChange(i: number, v: string) {
@@ -164,7 +211,10 @@ export default function InvoiceExchangePage() {
   }
 
   const validLines = lines.filter((l) => l.description.trim() && Number(l.amount) > 0);
-  const canSubmit = !!hotelId && validLines.length > 0;
+  const isCreateMode = !editId;
+  const canSubmitCreate = !!selectedSalesTxnId && !!hotelId && validLines.length > 0;
+  const canSubmitEdit = !!hotelId && validLines.length > 0;
+  const canSubmit = isCreateMode ? canSubmitCreate : canSubmitEdit;
 
   const createExchange = useMutation({
     mutationFn: async () => {
@@ -227,6 +277,7 @@ export default function InvoiceExchangePage() {
   });
 
   const isSaving = createExchange.isPending || updateExchange.isPending;
+  const formReady = !editId || !editQuery.isLoading;
 
   return (
     <AppShell searchPlaceholder="Cari faktur…">
@@ -243,7 +294,6 @@ export default function InvoiceExchangePage() {
 
         {/* Filter bar */}
         <div className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/40 px-4 py-3">
-          {/* Hotel */}
           <div className="min-w-[180px] flex-1 space-y-1">
             <span className="text-xs font-medium text-muted-foreground">Hotel</span>
             <Select
@@ -268,10 +318,9 @@ export default function InvoiceExchangePage() {
             </Select>
           </div>
 
-          {/* Date from */}
           <div className="min-w-[150px] space-y-1">
             <span className="text-xs font-medium text-muted-foreground">Dari tanggal</span>
-            <div className="relative flex items-center gap-1">
+            <div className="flex items-center gap-1">
               <DateField
                 value={filterDateFrom}
                 onChange={setFilterDateFrom}
@@ -279,20 +328,13 @@ export default function InvoiceExchangePage() {
                 className="h-9 flex-1 bg-background"
               />
               {filterDateFrom && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => setFilterDateFrom("")}
-                >
+                <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setFilterDateFrom("")}>
                   <X className="size-3" />
                 </Button>
               )}
             </div>
           </div>
 
-          {/* Date to */}
           <div className="min-w-[150px] space-y-1">
             <span className="text-xs font-medium text-muted-foreground">Sampai tanggal</span>
             <div className="flex items-center gap-1">
@@ -303,31 +345,20 @@ export default function InvoiceExchangePage() {
                 className="h-9 flex-1 bg-background"
               />
               {filterDateTo && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => setFilterDateTo("")}
-                >
+                <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setFilterDateTo("")}>
                   <X className="size-3" />
                 </Button>
               )}
             </div>
           </div>
 
-          {/* Reset */}
           {hasFilter && (
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="h-9 self-end"
-              onClick={() => {
-                setFilterHotelId("");
-                setFilterDateFrom("");
-                setFilterDateTo("");
-              }}
+              onClick={() => { setFilterHotelId(""); setFilterDateFrom(""); setFilterDateTo(""); }}
             >
               <X className="mr-1 size-3" />
               Reset filter
@@ -343,7 +374,7 @@ export default function InvoiceExchangePage() {
                 <TableHead>Tanggal</TableHead>
                 <TableHead>No. kwitansi</TableHead>
                 <TableHead className="text-right">Total</TableHead>
-                <TableHead className="w-[160px]" />
+                <TableHead className="w-[180px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -371,13 +402,7 @@ export default function InvoiceExchangePage() {
                         <Printer className="mr-1 size-3" />
                         Kwitansi
                       </Link>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEdit(row)}
-                        title="Edit"
-                      >
+                      <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row)} title="Edit">
                         <Pencil className="size-3" />
                       </Button>
                       <Button
@@ -412,97 +437,145 @@ export default function InvoiceExchangePage() {
           <DialogHeader>
             <DialogTitle>{editId ? "Edit penukaran faktur" : "Penukaran faktur"}</DialogTitle>
           </DialogHeader>
+
           {editId && editQuery.isLoading ? (
             <div className="py-8 text-center text-sm text-muted-foreground">Memuat data…</div>
           ) : (
             <div className="grid gap-4 py-2">
-              <div className="space-y-2">
-                <Label>Hotel</Label>
-                <Select
-                  value={hotelId ? String(hotelId) : undefined}
-                  onValueChange={(v) => setHotelId(v ?? "")}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih hotel">
-                      {(val) => labelForHotelValue(hotels.data, val) ?? undefined}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(hotels.data ?? []).map((h) => (
-                      <SelectItem key={h.id} value={String(h.id)}>
-                        {h.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!hotels.data?.length && !hotels.isLoading ? (
-                  <p className="text-xs text-muted-foreground">
-                    Belum ada hotel. Tambahkan di{" "}
-                    <Link
-                      href="/stock/harga-hotel"
-                      className="font-medium text-primary underline underline-offset-2 hover:text-primary/90"
-                    >
-                      Inventori → Harga hotel
-                    </Link>{" "}
-                    (Master hotel).
-                  </p>
-                ) : null}
-              </div>
-              <div className="space-y-2">
-                <Label>Tanggal</Label>
-                <DateField value={exchangeDate} onChange={setExchangeDate} />
-              </div>
-              <div className="space-y-2">
-                <Label>Catatan (opsional)</Label>
-                <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Baris nominal</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setLines((ls) => [...ls, { description: "", amount: "" }])}
-                  >
-                    <Plus className="mr-1 size-3" />
-                    Baris
-                  </Button>
-                </div>
+              {/* Sales transaction picker — create mode only */}
+              {!editId && (
                 <div className="space-y-2">
-                  {lines.map((line, i) => (
-                    <div key={i} className="flex gap-2">
-                      <Input
-                        className="flex-1"
-                        placeholder="Keterangan (otomatis dari nominal)"
-                        value={line.description}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setLines((ls) => ls.map((x, j) => (j === i ? { ...x, description: v } : x)));
-                        }}
-                      />
-                      <Input
-                        className="w-32"
-                        inputMode="decimal"
-                        placeholder="Nominal"
-                        value={line.amount}
-                        onChange={(e) => handleAmountChange(i, e.target.value)}
-                      />
+                  <Label>
+                    Transaksi penjualan <span className="text-destructive">*</span>
+                  </Label>
+                  {salesTransactions.isLoading ? (
+                    <p className="text-sm text-muted-foreground">Memuat daftar transaksi…</p>
+                  ) : (
+                    <Select
+                      value={selectedSalesTxnId || undefined}
+                      onValueChange={(v) => v && onSalesTransactionSelect(v)}
+                    >
+                      <SelectTrigger className={!selectedSalesTxnId ? "border-dashed" : ""}>
+                        <SelectValue placeholder="Pilih transaksi penjualan…" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        {(salesTransactions.data ?? []).map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            <span className="font-mono text-xs text-primary">{t.transactionCode}</span>
+                            <span className="ml-2 text-muted-foreground">
+                              {t.hotelName} · {formatDate(t.saleDate)} · {formatIdr(t.grandTotal)}
+                            </span>
+                          </SelectItem>
+                        ))}
+                        {!salesTransactions.data?.length && (
+                          <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                            Belum ada transaksi penjualan.
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {!selectedSalesTxnId && (
+                    <p className="text-xs text-muted-foreground">
+                      Pilih transaksi penjualan untuk mengisi otomatis hotel, tanggal, dan baris nominal.
+                    </p>
+                  )}
+                  {salesDetailLoading && (
+                    <p className="text-xs text-primary">Memuat detail transaksi…</p>
+                  )}
+                </div>
+              )}
+
+              {/* Show rest of form after transaction is selected (create) or always in edit */}
+              {(!!selectedSalesTxnId || !!editId) && formReady && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Hotel</Label>
+                    {!editId ? (
+                      <div className="flex h-10 items-center rounded-md border bg-muted/50 px-3 text-sm font-medium">
+                        {labelForHotelValue(hotels.data, hotelId) ?? hotelId}
+                      </div>
+                    ) : (
+                      <Select
+                        value={hotelId ? String(hotelId) : undefined}
+                        onValueChange={(v) => setHotelId(v ?? "")}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pilih hotel">
+                            {(val) => labelForHotelValue(hotels.data, val) ?? undefined}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(hotels.data ?? []).map((h) => (
+                            <SelectItem key={h.id} value={String(h.id)}>
+                              {h.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Tanggal</Label>
+                    <DateField value={exchangeDate} onChange={setExchangeDate} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Catatan (opsional)</Label>
+                    <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Baris nominal</Label>
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={lines.length <= 1}
-                        onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setLines((ls) => [...ls, { description: "", amount: "" }])}
                       >
-                        <Trash2 className="size-4" />
+                        <Plus className="mr-1 size-3" />
+                        Baris
                       </Button>
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <div className="space-y-2">
+                      {lines.map((line, i) => (
+                        <div key={i} className="flex gap-2">
+                          <Input
+                            className="flex-1"
+                            placeholder="Keterangan"
+                            value={line.description}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setLines((ls) => ls.map((x, j) => (j === i ? { ...x, description: v } : x)));
+                            }}
+                          />
+                          <Input
+                            className="w-32"
+                            inputMode="decimal"
+                            placeholder="Nominal"
+                            value={line.amount}
+                            onChange={(e) => handleAmountChange(i, e.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={lines.length <= 1}
+                            onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
+
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={closeDialog}>
               Batal
@@ -510,7 +583,7 @@ export default function InvoiceExchangePage() {
             <Button
               type="button"
               className="btn-gradient border-0"
-              disabled={isSaving || !canSubmit || (!!editId && editQuery.isLoading)}
+              disabled={isSaving || !canSubmit || !formReady}
               onClick={() => (editId ? updateExchange.mutate() : createExchange.mutate())}
             >
               {editId ? "Simpan perubahan" : "Simpan & kwitansi"}

@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Boxes,
-  Building2,
   LayoutDashboard,
   Package,
   Receipt,
@@ -13,6 +13,7 @@ import {
   Store,
   Wallet,
 } from "lucide-react";
+import logoSoka from "@/assets/logo_soka.png";
 import { cn } from "@/lib/utils";
 
 /** Item menu utama aplikasi — satu sumber untuk sidebar desktop & sheet mobile. */
@@ -47,13 +48,11 @@ type MainNavBrandProps = { className?: string };
 export function MainNavBrand({ className }: MainNavBrandProps) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <div className="flex size-10 items-center justify-center rounded-xl bg-white/10 text-sidebar-foreground ring-1 ring-white/15">
-        <Building2 className="size-5" />
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white p-1 ring-1 ring-white/20">
+        <Image src={logoSoka} alt="Soka Frozen" width={36} height={36} className="object-contain" />
       </div>
       <div>
-        <p className="text-sm font-semibold leading-tight text-sidebar-foreground">
-          Executive Architect
-        </p>
+        <p className="text-sm font-semibold leading-tight text-sidebar-foreground">Soka Frozen</p>
         <p className="text-xs text-sidebar-foreground/70">Operasi bisnis</p>
       </div>
     </div>
@@ -106,7 +105,7 @@ export function MainNavFooter({ className }: { className?: string }) {
   return (
     <div className={cn("border-t border-sidebar-border px-5 py-4", className)}>
       <p className="text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
-        EA HQ Enterprise
+        Soka Frozen
       </p>
       <p className="mt-0.5 text-xs text-sidebar-foreground/50">v1.0 · konsol operasi</p>
     </div>
