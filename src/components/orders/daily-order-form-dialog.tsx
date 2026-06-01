@@ -163,6 +163,42 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
     return m;
   }, [products.data]);
 
+  // Fetch master sell prices untuk hotel yang dipilih
+  const hotelSellPrices = useQuery({
+    queryKey: ["hotel-sell-prices-order", hotelId],
+    queryFn: async () => {
+      const { data } = await api.get<{
+        data: { finishedProductId: string; sellPrice: string | null }[];
+      }>(`/hotels/${hotelId}/finished-sell-prices`);
+      return data.data;
+    },
+    enabled: open && Boolean(hotelId),
+    staleTime: 60_000,
+  });
+
+  // Map finishedProductId → sellPrice untuk lookup cepat
+  const hotelPriceMap = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const p of hotelSellPrices.data ?? []) m.set(p.finishedProductId, p.sellPrice);
+    return m;
+  }, [hotelSellPrices.data]);
+
+  // Saat hotel berubah, update unitPrice semua baris yang sudah punya produk
+  useEffect(() => {
+    if (!hotelId || !hotelSellPrices.data) return;
+    setLines((prev) =>
+      prev.map((l) => {
+        if (!l.finishedProductId) return l;
+        const price = hotelPriceMap.get(l.finishedProductId);
+        if (price != null && Number(price) > 0) {
+          return { ...l, unitPrice: String(Number(price)) };
+        }
+        return l;
+      }),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelId, hotelSellPrices.data]);
+
   // ---------------------------------------------------------------------------
   // Computed grand total preview
   // ---------------------------------------------------------------------------
@@ -388,9 +424,15 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                         <Label className="text-xs">Produk</Label>
                         <Select
                           value={line.finishedProductId || undefined}
-                          onValueChange={(v) =>
-                            updateLine(line.key, { finishedProductId: v ?? "" })
-                          }
+                          onValueChange={(v) => {
+                            const productId = v ?? "";
+                            const hotelPrice = productId ? hotelPriceMap.get(productId) : undefined;
+                            const patch: Partial<DraftLine> = { finishedProductId: productId };
+                            if (hotelPrice != null && Number(hotelPrice) > 0) {
+                              patch.unitPrice = String(Number(hotelPrice));
+                            }
+                            updateLine(line.key, patch);
+                          }}
                         >
                           <SelectTrigger className="w-full min-w-0">
                             <SelectValue placeholder="Pilih produk">
@@ -480,6 +522,22 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                           value={line.unitPrice}
                           onChange={(e) => updateLine(line.key, { unitPrice: e.target.value })}
                         />
+                        {(() => {
+                          if (!line.finishedProductId || !hotelId) return null;
+                          const mp = hotelPriceMap.get(line.finishedProductId);
+                          if (mp == null) return null;
+                          if (Number(mp) <= 0)
+                            return (
+                              <p className="text-[11px] text-amber-600">
+                                Harga master belum diset untuk hotel ini.
+                              </p>
+                            );
+                          return (
+                            <p className="text-[11px] text-primary/70">
+                              Master: {formatIdr(mp)}
+                            </p>
+                          );
+                        })()}
                       </div>
 
                       {/* Subtotal */}

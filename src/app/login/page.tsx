@@ -60,9 +60,7 @@ export default function LoginPage() {
       />
 
       <div className="relative mb-10 flex items-center gap-4 text-white">
-        <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-white p-1.5 ring-1 ring-white/20 shadow-lg">
-          <Image src={logoSoka} alt="Soka Frozen" width={52} height={52} className="object-contain" />
-        </div>
+        <Image src={logoSoka} alt="Soka Frozen" width={64} height={64} className="shrink-0 object-contain drop-shadow-lg" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight drop-shadow-sm">{APP_NAME}</h1>
           <p className="text-sm font-medium text-white/85">{APP_TAGLINE}</p>
