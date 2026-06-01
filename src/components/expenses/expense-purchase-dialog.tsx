@@ -76,11 +76,9 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
     let sum = 0;
     for (const line of lines) {
       const q = Number(line.qty.trim());
-      const masterCp = Number(line.masterCostPrice.trim());
-      // Gunakan masterCostPrice jika tersedia, fallback ke unitPrice manual
-      const effectiveCp = masterCp > 0 ? masterCp : Number(line.unitPrice.trim());
-      if (Number.isFinite(q) && q > 0 && Number.isFinite(effectiveCp) && effectiveCp > 0) {
-        sum += q * effectiveCp;
+      const cp = Number(line.unitPrice.trim());
+      if (Number.isFinite(q) && q > 0 && Number.isFinite(cp) && cp > 0) {
+        sum += q * cp;
       }
     }
     return sum;
@@ -112,12 +110,9 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
           rawMaterialId: String(line.rawMaterialId),
           qty: q,
         };
-        // Kirim unitPrice manual sebagai fallback jika master price tidak tersedia
-        const masterCp = Number(line.masterCostPrice.trim());
-        if (masterCp <= 0) {
-          const manualCp = Number(line.unitPrice.trim());
-          if (manualCp > 0) row.unitPrice = manualCp;
-        }
+        // Kirim unitPrice jika user sudah isi (pre-fill dari master atau input manual)
+        const cp = Number(line.unitPrice.trim());
+        if (Number.isFinite(cp) && cp > 0) row.unitPrice = cp;
         const ln = line.lineNotes.trim();
         if (ln) row.notes = ln;
 
@@ -204,9 +199,8 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
         <DialogHeader>
           <DialogTitle>Tambah pembelian</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Satu tanggal, beberapa barang. Harga satuan diambil otomatis dari master bahan baku;
-            jika belum diset, isi manual. &quot;Catatan default&quot; dipakai untuk setiap baris;
-            isian &quot;Catatan baris&quot; menggantikan default hanya untuk baris itu.
+            Satu tanggal, beberapa barang. Harga satuan otomatis terisi dari master bahan baku dan
+            bisa diubah langsung — tanpa perlu edit master dulu.
           </p>
         </DialogHeader>
 
@@ -264,14 +258,16 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                         )
                       }
                       onSelect={(row: RawMaterialRow) => {
+                        const cp = row.costPrice ?? "";
                         setLines((prev) =>
                           prev.map((l) =>
                             l.key === line.key
                               ? {
                                   ...l,
-                                  masterCostPrice: row.costPrice ?? "",
-                                  // Reset unitPrice manual saat produk berubah
-                                  unitPrice: "",
+                                  // Simpan master price sebagai referensi hint
+                                  masterCostPrice: cp,
+                                  // Pre-fill unitPrice dari master; user bisa override
+                                  unitPrice: cp && Number(cp) > 0 ? String(Number(cp)) : "",
                                 }
                               : l,
                           ),
@@ -297,37 +293,32 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                       />
                     </div>
                     <div className="space-y-1.5">
+                      <Label className="text-xs">Harga satuan (Rp)</Label>
+                      <Input
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        placeholder="0"
+                        value={line.unitPrice}
+                        onChange={(e) =>
+                          setLines((prev) =>
+                            prev.map((l) =>
+                              l.key === line.key ? { ...l, unitPrice: e.target.value } : l,
+                            ),
+                          )
+                        }
+                      />
+                      {/* Hint harga master sebagai referensi */}
                       {Number(line.masterCostPrice) > 0 ? (
-                        <>
-                          <Label className="text-xs">Harga satuan (dari master)</Label>
-                          <div className="flex h-9 items-center rounded-md border bg-muted/50 px-3 text-sm font-semibold tabular-nums text-foreground">
-                            {formatIdr(line.masterCostPrice)}
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <Label className="text-xs">Harga satuan (Rp)</Label>
-                          <Input
-                            inputMode="decimal"
-                            min={0}
-                            step="any"
-                            placeholder="0"
-                            value={line.unitPrice}
-                            onChange={(e) =>
-                              setLines((prev) =>
-                                prev.map((l) =>
-                                  l.key === line.key ? { ...l, unitPrice: e.target.value } : l,
-                                ),
-                              )
-                            }
-                          />
-                          {line.rawMaterialId ? (
-                            <p className="text-[11px] text-amber-600">
-                              Harga master belum diset — isi manual atau kosongkan.
-                            </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Master: {formatIdr(line.masterCostPrice)}
+                          {line.unitPrice && Number(line.unitPrice) !== Number(line.masterCostPrice) ? (
+                            <span className="ml-1 text-amber-600">(diubah)</span>
                           ) : null}
-                        </>
-                      )}
+                        </p>
+                      ) : line.rawMaterialId ? (
+                        <p className="text-[11px] text-amber-600">Harga master belum diset.</p>
+                      ) : null}
                     </div>
                   </div>
 

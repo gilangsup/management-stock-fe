@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Building2, MapPin, Pencil, Phone, Plus, Save, Trash2 } from "lucide-react";
+import { Building2, FileDown, Loader2, MapPin, Pencil, Phone, Plus, Save, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { downloadAuthenticatedFile } from "@/lib/export-utils";
 import { formatIdr, formatMarginPercent } from "@/lib/format";
 import { labelForHotelValue } from "@/lib/select-labels";
 import type { HotelFinishedSellPriceRow } from "./types";
@@ -276,6 +277,10 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
   const [editTarget, setEditTarget] = useState<Hotel | null>(null);
   const [editForm, setEditForm] = useState<HotelFormState>(emptyForm());
 
+  // Bulk import
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [templateLoading, setTemplateLoading] = useState(false);
+
   const hotels = useQuery({
     queryKey: ["hotels"],
     queryFn: async () => {
@@ -322,6 +327,52 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "Gagal memperbarui hotel")),
   });
+
+  const importPrices = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const { data } = await api.post<{
+        success: boolean;
+        data?: { updated: number; skipped: number; hotelCount: number; errors: string[]; message: string };
+        error?: string;
+      }>("/hotels/import-all-prices", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return data;
+    },
+    onSuccess: (res) => {
+      if (res.success && res.data) {
+        toast.success(res.data.message);
+        if (res.data.errors.length > 0) {
+          toast.warning(`${res.data.errors.length} produk tidak ditemukan: ${res.data.errors.slice(0, 3).join(", ")}${res.data.errors.length > 3 ? "…" : ""}`);
+        }
+        qc.invalidateQueries({ queryKey: ["hotel-sell-prices"] });
+      } else {
+        toast.error(res.error ?? "Import gagal");
+      }
+    },
+    onError: (e) => toast.error(getApiErrorMessage(e, "Gagal mengimport harga")),
+    onSettled: () => {
+      // Reset file input agar bisa upload file yang sama lagi
+      if (importFileRef.current) importFileRef.current.value = "";
+    },
+  });
+
+  async function handleDownloadTemplate() {
+    setTemplateLoading(true);
+    try {
+      await downloadAuthenticatedFile(
+        "/hotels/price-import-template",
+        {},
+        "template_harga_produk.xlsx",
+      );
+    } catch {
+      toast.error("Gagal mengunduh template");
+    } finally {
+      setTemplateLoading(false);
+    }
+  }
 
   function openEdit(h: Hotel) {
     setEditTarget(h);
@@ -547,6 +598,70 @@ export function HotelSellPricesTab({ isAdmin }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk import section */}
+      <Card className="border-border bg-card shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Import harga massal</CardTitle>
+          <CardDescription>
+            Download template Excel berisi semua barang jadi, isi kolom{" "}
+            <strong>HARGA_BARU</strong>, lalu upload kembali. Harga yang diimport akan berlaku
+            untuk <strong>semua hotel</strong> sekaligus.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={templateLoading}
+              onClick={handleDownloadTemplate}
+            >
+              {templateLoading ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <FileDown className="mr-2 size-4" />
+              )}
+              Unduh Template
+            </Button>
+
+            {isAdmin && (
+              <>
+                {/* Hidden file input */}
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) importPrices.mutate(file);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-primary/30 bg-primary/5 hover:bg-primary/10"
+                  disabled={importPrices.isPending}
+                  onClick={() => importFileRef.current?.click()}
+                >
+                  {importPrices.isPending ? (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  ) : (
+                    <Upload className="mr-2 size-4" />
+                  )}
+                  {importPrices.isPending ? "Mengimport…" : "Import dari Excel"}
+                </Button>
+              </>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Unduh template terlebih dahulu — template sudah berisi semua produk dan harga saat ini.
+            Ubah harga yang perlu diubah pada kolom <strong>HARGA_BARU</strong>, baris lain bisa
+            dibiarkan.
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Sell prices section */}
       <div>
