@@ -100,7 +100,7 @@ export default function InvoiceExchangePage() {
     },
   });
 
-  // Fetch daftar transaksi penjualan untuk hotel yang dipilih (create mode saja)
+  // Fetch daftar transaksi penjualan untuk hotel yang dipilih (create & edit mode)
   const salesTransactions = useQuery({
     queryKey: ["sales-transactions-for-exchange", hotelId],
     queryFn: async () => {
@@ -109,7 +109,7 @@ export default function InvoiceExchangePage() {
       });
       return data.data;
     },
-    enabled: open && !editId && !!hotelId,
+    enabled: open && !!hotelId,
     staleTime: 30_000,
   });
 
@@ -286,15 +286,13 @@ export default function InvoiceExchangePage() {
         notes: notes || undefined,
         lines: validLines.map((l) => ({ description: l.description.trim(), amount: Number(l.amount) })),
       };
-      const { data } = await api.post("/invoice-exchanges", payload);
-      return data as { data: { id: string } };
+      await api.post("/invoice-exchanges", payload);
     },
-    onSuccess: (res) => {
+    onSuccess: () => {
       toast.success("Penukaran faktur tersimpan — piutang otomatis dibuat");
       closeDialog();
       qc.invalidateQueries({ queryKey: ["invoice-exchanges"], exact: false });
       qc.invalidateQueries({ queryKey: ["receivables"] });
-      window.open(`/invoice-exchange/${res.data.id}/receipt`, "_blank", "noopener,noreferrer");
     },
     onError: () => toast.error("Gagal menyimpan"),
   });
@@ -504,103 +502,16 @@ export default function InvoiceExchangePage() {
             <div className="py-8 text-center text-sm text-muted-foreground">Memuat data…</div>
           ) : (
             <div className="grid gap-4 py-2">
-              {/* ── Create mode: Hotel dulu, baru transaksi ── */}
-              {!editId && (
-                <>
-                  {/* Step 1: Pilih hotel */}
-                  <div className="space-y-2">
-                    <Label>
-                      Hotel <span className="text-destructive">*</span>
-                    </Label>
-                    <Select
-                      value={hotelId || undefined}
-                      onValueChange={(v) => v && onCreateHotelChange(v)}
-                    >
-                      <SelectTrigger className={!hotelId ? "border-dashed" : ""}>
-                        <SelectValue placeholder="Pilih hotel…">
-                          {(val) => labelForHotelValue(hotels.data, val) ?? undefined}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(hotels.data ?? []).map((h) => (
-                          <SelectItem key={h.id} value={String(h.id)}>
-                            {h.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Step 2: Pilih transaksi (muncul setelah hotel dipilih) — multi-select */}
-                  {hotelId && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>
-                          Transaksi penjualan <span className="text-destructive">*</span>
-                        </Label>
-                        {selectedTxnIds.length > 0 && (
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                            {selectedTxnIds.length} dipilih
-                          </span>
-                        )}
-                      </div>
-                      {salesTransactions.isLoading ? (
-                        <p className="text-sm text-muted-foreground">Memuat transaksi…</p>
-                      ) : !salesTransactions.data?.length ? (
-                        <p className="rounded border border-dashed px-3 py-3 text-center text-sm text-muted-foreground">
-                          Tidak ada transaksi untuk hotel ini.
-                        </p>
-                      ) : (
-                        <div className="max-h-52 overflow-y-auto rounded-md border divide-y">
-                          {(salesTransactions.data ?? []).map((t) => {
-                            const checked = selectedTxnIds.includes(t.id);
-                            const loading = loadingTxnIds.has(t.id);
-                            return (
-                              <button
-                                key={t.id}
-                                type="button"
-                                className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
-                                onClick={() => toggleTransaction(t.id)}
-                                disabled={loading}
-                              >
-                                {loading ? (
-                                  <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
-                                ) : checked ? (
-                                  <CheckSquare2 className="size-4 shrink-0 text-primary" />
-                                ) : (
-                                  <Square className="size-4 shrink-0 text-muted-foreground" />
-                                )}
-                                <span className="font-mono text-xs font-semibold text-primary">
-                                  {t.transactionCode}
-                                </span>
-                                <span className="flex-1 text-xs text-muted-foreground">
-                                  {formatDate(t.saleDate)}
-                                </span>
-                                <span className="text-xs font-medium tabular-nums">
-                                  {formatIdr(t.grandTotal)}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {selectedTxnIds.length === 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          Centang satu atau lebih transaksi. Baris nominal akan terisi otomatis.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Edit mode: hotel selector */}
-              {!!editId && formReady && (
-                <div className="space-y-2">
-                  <Label>Hotel</Label>
+              {/* ── Step 1: Pilih hotel ── */}
+              <div className="space-y-2">
+                <Label>
+                  Hotel {!editId && <span className="text-destructive">*</span>}
+                </Label>
+                {editId ? (
                   <Select
                     value={hotelId ? String(hotelId) : undefined}
                     onValueChange={(v) => setHotelId(v ?? "")}
+                    disabled={editQuery.isLoading}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Pilih hotel">
@@ -615,6 +526,90 @@ export default function InvoiceExchangePage() {
                       ))}
                     </SelectContent>
                   </Select>
+                ) : (
+                  <Select
+                    value={hotelId || undefined}
+                    onValueChange={(v) => v && onCreateHotelChange(v)}
+                  >
+                    <SelectTrigger className={!hotelId ? "border-dashed" : ""}>
+                      <SelectValue placeholder="Pilih hotel…">
+                        {(val) => labelForHotelValue(hotels.data, val) ?? undefined}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(hotels.data ?? []).map((h) => (
+                        <SelectItem key={h.id} value={String(h.id)}>
+                          {h.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* ── Step 2: Pilih transaksi (muncul setelah hotel dipilih) — multi-select ── */}
+              {hotelId && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      Transaksi penjualan {!editId && <span className="text-destructive">*</span>}
+                    </Label>
+                    {selectedTxnIds.length > 0 && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                        {selectedTxnIds.length} dipilih
+                      </span>
+                    )}
+                  </div>
+                  {salesTransactions.isLoading ? (
+                    <p className="text-sm text-muted-foreground">Memuat transaksi…</p>
+                  ) : !salesTransactions.data?.length ? (
+                    <p className="rounded border border-dashed px-3 py-3 text-center text-sm text-muted-foreground">
+                      Tidak ada transaksi untuk hotel ini.
+                    </p>
+                  ) : (
+                    <div className="max-h-52 overflow-y-auto rounded-md border divide-y">
+                      {(salesTransactions.data ?? []).map((t) => {
+                        const checked = selectedTxnIds.includes(t.id);
+                        const loading = loadingTxnIds.has(t.id);
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+                            onClick={() => toggleTransaction(t.id)}
+                            disabled={loading}
+                          >
+                            {loading ? (
+                              <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                            ) : checked ? (
+                              <CheckSquare2 className="size-4 shrink-0 text-primary" />
+                            ) : (
+                              <Square className="size-4 shrink-0 text-muted-foreground" />
+                            )}
+                            <span className="font-mono text-xs font-semibold text-primary">
+                              {t.transactionCode}
+                            </span>
+                            <span className="flex-1 text-xs text-muted-foreground">
+                              {formatDate(t.saleDate)}
+                            </span>
+                            <span className="text-xs font-medium tabular-nums">
+                              {formatIdr(t.grandTotal)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {!editId && selectedTxnIds.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Centang satu atau lebih transaksi. Baris nominal akan terisi otomatis.
+                    </p>
+                  )}
+                  {editId && selectedTxnIds.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Transaksi yang dipilih akan ditambahkan sebagai baris baru.
+                    </p>
+                  )}
                 </div>
               )}
 

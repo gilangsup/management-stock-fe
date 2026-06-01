@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { escapeHtml, printHtmlDocument } from "@/lib/export-utils";
 import { formatDate, formatIdr } from "@/lib/format";
+import { APP_NAME, COMPANY_ADDRESS, COMPANY_PHONES } from "@/lib/brand";
 import { ReportExportActions } from "@/components/reports/report-export-actions";
 import {
   ReportDateFilter,
@@ -42,6 +43,7 @@ type InvoiceListRow = {
   transactionCode: string;
   saleDate: string;
   grandTotal: string;
+  totalQty: string;
   hotel: { code: string; name: string };
 };
 
@@ -112,49 +114,119 @@ export function SalesInvoicesReportTab() {
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const printPdf = useCallback(() => {
+    const rekapStyles = `
+      body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #111; margin: 12mm 14mm; }
+      .report-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 2px solid #222; padding-bottom: 8px; }
+      .company-block { flex: 1; }
+      .report-title { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; margin: 0 0 3px; }
+      .company-name { font-size: 11px; font-weight: 700; margin: 0 0 1px; }
+      .company-detail { font-size: 9px; color: #555; margin: 0; }
+      .periode-block { text-align: right; font-size: 10px; }
+      .periode-block p { margin: 0 0 2px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+      th, td { border: 1px solid #aaa; padding: 3px 6px; font-size: 9.5px; }
+      th { background: #e0e0e0; font-weight: 700; text-align: left; }
+      .num { text-align: right; white-space: nowrap; }
+      tbody tr:nth-child(even) { background: #f9f9f9; }
+      tfoot td { font-weight: 700; background: #e8e8e8; border-top: 2px solid #555; }
+      .summary-block { margin-top: 8px; display: flex; justify-content: flex-end; }
+      .summary-table { border-collapse: collapse; min-width: 260px; }
+      .summary-table td { border: 1px solid #aaa; padding: 3px 10px; font-size: 10px; }
+      .summary-table .label { font-weight: 700; }
+      .summary-table .val { text-align: right; }
+      @media print { body { margin: 8mm 10mm; } }
+    `;
+
     if (mode === "grouped") {
+      const totalInvoices = groupedRows.reduce((s, r) => s + r.invoiceCount, 0);
       const body = groupedRows
         .map(
           (r) =>
             `<tr>
               <td>${escapeHtml(r.period)}</td>
-              <td class="text-right">${r.invoiceCount}</td>
-              <td class="text-right">${escapeHtml(formatIdr(r.totalAmount))}</td>
+              <td class="num">${r.invoiceCount}</td>
+              <td class="num">${escapeHtml(formatIdr(r.totalAmount))}</td>
             </tr>`,
         )
         .join("");
       printHtmlDocument(
-        `Laporan faktur ${from}–${to}`,
-        `<h1>Laporan Faktur Penjualan — ${escapeHtml(GROUP_LABELS[groupBy])}</h1>
-         <p class="meta">${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))} · ${escapeHtml(hotelLabel)}</p>
+        `Laporan Penjualan ${from}–${to}`,
+        `<style>${rekapStyles}</style>
+         <div class="report-header">
+           <div class="company-block">
+             <p class="report-title">LAPORAN PENJUALAN REKAP</p>
+             <p class="company-name">${escapeHtml(APP_NAME)}</p>
+             <p class="company-detail">${escapeHtml(COMPANY_ADDRESS)}</p>
+             <p class="company-detail">${escapeHtml(COMPANY_PHONES)}</p>
+           </div>
+           <div class="periode-block">
+             <p><strong>PERIODE :</strong> ${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))}</p>
+             <p>Hotel : ${escapeHtml(hotelLabel)}</p>
+             <p>Kelompok : ${escapeHtml(GROUP_LABELS[groupBy])}</p>
+           </div>
+         </div>
          <table>
-           <thead><tr><th>Periode</th><th class="text-right">Jumlah faktur</th><th class="text-right">Total</th></tr></thead>
+           <thead><tr><th>Periode</th><th class="num">Jumlah Faktur</th><th class="num">Sub Total</th></tr></thead>
            <tbody>${body}</tbody>
-           <tfoot><tr><td class="text-right">Grand total</td><td></td><td class="text-right">${escapeHtml(formatIdr(grandTotal))}</td></tr></tfoot>
+           <tfoot><tr><td><strong>TOTAL KESELURUHAN</strong></td><td class="num">${totalInvoices}</td><td class="num">${escapeHtml(formatIdr(grandTotal))}</td></tr></tfoot>
          </table>`,
       );
       return;
     }
+
+    const totalQtyAll = listRows.reduce((s, r) => s + Number(r.totalQty), 0);
     const body = listRows
       .map(
         (r) =>
           `<tr>
             <td>${escapeHtml(r.transactionCode)}</td>
             <td>${escapeHtml(formatDate(r.saleDate))}</td>
-            <td>${escapeHtml(r.hotel.name)}</td>
-            <td class="text-right">${escapeHtml(formatIdr(r.grandTotal))}</td>
+            <td>${escapeHtml(r.hotel.code)}</td>
+            <td class="num">${Number(r.totalQty).toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+            <td class="num">${escapeHtml(formatIdr(r.grandTotal))}</td>
           </tr>`,
       )
       .join("");
     printHtmlDocument(
-      `Laporan faktur ${from}–${to}`,
-      `<h1>Laporan Faktur Penjualan</h1>
-       <p class="meta">${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))} · ${escapeHtml(hotelLabel)}</p>
+      `Laporan Penjualan ${from}–${to}`,
+      `<style>${rekapStyles}</style>
+       <div class="report-header">
+         <div class="company-block">
+           <p class="report-title">LAPORAN PENJUALAN REKAP</p>
+           <p class="company-name">${escapeHtml(APP_NAME)}</p>
+           <p class="company-detail">${escapeHtml(COMPANY_ADDRESS)}</p>
+           <p class="company-detail">${escapeHtml(COMPANY_PHONES)}</p>
+         </div>
+         <div class="periode-block">
+           <p><strong>PERIODE :</strong> ${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))}</p>
+           <p>Hotel : ${escapeHtml(hotelLabel)}</p>
+         </div>
+       </div>
        <table>
-         <thead><tr><th>Kode faktur</th><th>Tanggal</th><th>Hotel</th><th class="text-right">Total</th></tr></thead>
+         <thead>
+           <tr>
+             <th>No Transaksi</th>
+             <th>Tanggal</th>
+             <th>Kode Pelanggan</th>
+             <th class="num">Jml Item</th>
+             <th class="num">Sub Total</th>
+           </tr>
+         </thead>
          <tbody>${body}</tbody>
-         <tfoot><tr><td colspan="3" class="text-right">Grand total</td><td class="text-right">${escapeHtml(formatIdr(grandTotal))}</td></tr></tfoot>
-       </table>`,
+         <tfoot>
+           <tr>
+             <td colspan="3"><strong>TOTAL KESELURUHAN :</strong></td>
+             <td class="num">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+             <td class="num">${escapeHtml(formatIdr(grandTotal))}</td>
+           </tr>
+         </tfoot>
+       </table>
+       <div class="summary-block">
+         <table class="summary-table">
+           <tr><td class="label">Jumlah Item</td><td class="label">:</td><td class="val">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td></tr>
+           <tr><td class="label">Sub Total</td><td class="label">:</td><td class="val">${escapeHtml(formatIdr(grandTotal))}</td></tr>
+         </table>
+       </div>`,
     );
   }, [mode, groupedRows, listRows, from, to, groupBy, hotelLabel, grandTotal]);
 
@@ -263,10 +335,11 @@ export function SalesInvoicesReportTab() {
             <>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Kode faktur</TableHead>
+                  <TableHead>No Transaksi</TableHead>
                   <TableHead>Tanggal</TableHead>
-                  <TableHead>Hotel</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Kode Pelanggan</TableHead>
+                  <TableHead className="text-right">Jml Item</TableHead>
+                  <TableHead className="text-right">Sub Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -275,8 +348,11 @@ export function SalesInvoicesReportTab() {
                     <TableCell className="font-mono text-sm">{r.transactionCode}</TableCell>
                     <TableCell>{formatDate(r.saleDate)}</TableCell>
                     <TableCell>
-                      {r.hotel.name}
-                      <span className="ml-1 text-xs text-muted-foreground">({r.hotel.code})</span>
+                      <span className="font-mono text-xs font-semibold text-primary">{r.hotel.code}</span>
+                      <span className="ml-1 text-xs text-muted-foreground">{r.hotel.name}</span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {Number(r.totalQty).toLocaleString("id-ID", { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
                       {formatIdr(r.grandTotal)}
@@ -289,7 +365,7 @@ export function SalesInvoicesReportTab() {
           {!hasData && (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                   {query.isLoading ? (
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="size-4 animate-spin" /> Memuat…

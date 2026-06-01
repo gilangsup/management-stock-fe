@@ -51,15 +51,17 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: (invoiceId: string) => void;
+  editId?: string | null;
 };
 
-export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Props) {
+export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess, editId }: Props) {
   const qc = useQueryClient();
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [hotelId, setHotelId] = useState("");
   const [saleDate, setSaleDate] = useState(today);
   const [lines, setLines] = useState<DraftLine[]>(() => [newLine()]);
   const [importOrderId, setImportOrderId] = useState<string | null>(null);
+  const isEditMode = !!editId;
 
   const hotels = useQuery({
     queryKey: ["hotels"],
@@ -93,6 +95,45 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
     },
     enabled: Boolean(importOrderId),
   });
+
+  // Fetch detail faktur yang diedit
+  const editDetail = useQuery({
+    queryKey: ["sales-transaction-edit-detail", editId],
+    queryFn: async () => {
+      const { data } = await api.get<{
+        data: {
+          id: string;
+          hotelId: string;
+          saleDate: string;
+          lines: { finishedProductId: string; qty: string }[];
+        };
+      }>(`/sales-transactions/${editId}`);
+      return data.data;
+    },
+    enabled: open && isEditMode && !!editId,
+    staleTime: 0,
+  });
+
+  // Pre-fill form ketika edit data selesai dimuat
+  useEffect(() => {
+    if (!isEditMode || !editDetail.data) return;
+    setHotelId(editDetail.data.hotelId);
+    setSaleDate(editDetail.data.saleDate);
+    const draftLines: DraftLine[] = editDetail.data.lines.map((l) => ({
+      key: crypto.randomUUID(),
+      finishedProductId: String(l.finishedProductId),
+      preview: null,
+      qty: String(Number(l.qty)),
+    }));
+    setLines(draftLines.length ? draftLines : [newLine()]);
+    // Load preview for each line
+    for (const dl of draftLines) {
+      if (dl.finishedProductId && editDetail.data.hotelId) {
+        void loadPreview(dl.key, editDetail.data.hotelId, dl.finishedProductId);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editDetail.data]);
 
   const pricedProducts = useQuery({
     queryKey: ["finished-sell-prices-for-sale", hotelId],
@@ -134,14 +175,16 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
     [],
   );
 
+  const bodyLines = useMemo(
+    () =>
+      lines
+        .filter((l) => l.finishedProductId && Number(l.qty) > 0)
+        .map((l) => ({ finishedProductId: l.finishedProductId, qty: Number(l.qty) })),
+    [lines],
+  );
+
   const createTx = useMutation({
     mutationFn: async () => {
-      const bodyLines = lines
-        .filter((l) => l.finishedProductId && Number(l.qty) > 0)
-        .map((l) => ({
-          finishedProductId: l.finishedProductId,
-          qty: Number(l.qty),
-        }));
       const { data } = await api.post<{ data: { id: string } }>("/sales-transactions", {
         hotelId,
         saleDate,
@@ -157,6 +200,25 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
       onSuccess(res.id);
     },
     onError: (e) => toast.error(getApiErrorMessage(e, "Gagal menyimpan faktur")),
+  });
+
+  const updateTx = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.put<{ data: { id: string } }>(`/sales-transactions/${editId}`, {
+        saleDate,
+        lines: bodyLines,
+      });
+      return data.data;
+    },
+    onSuccess: (res) => {
+      toast.success("Faktur penjualan berhasil diperbarui");
+      qc.invalidateQueries({ queryKey: ["sales-transactions"] });
+      qc.invalidateQueries({ queryKey: ["sales-transaction-edit-detail", editId] });
+      onOpenChange(false);
+      resetForm();
+      onSuccess(res.id);
+    },
+    onError: (e) => toast.error(getApiErrorMessage(e, "Gagal memperbarui faktur")),
   });
 
   // Auto-apply import when detail loads
@@ -230,18 +292,33 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
     hotelId &&
     saleDate &&
     lines.some((l) => l.finishedProductId && l.preview && Number(l.qty) > 0);
+  const isPending = createTx.isPending || updateTx.isPending;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-5xl">
         <DialogHeader>
-          <DialogTitle>Tambah faktur penjualan</DialogTitle>
+          <DialogTitle>
+            {isEditMode ? "Edit faktur penjualan" : "Tambah faktur penjualan"}
+          </DialogTitle>
         </DialogHeader>
 
+        {isEditMode && editDetail.isLoading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">Memuat data…</div>
+        ) : (
         <div className="grid gap-4 py-2">
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Hotel</Label>
+              {isEditMode ? (
+                // Hotel terkunci saat edit (tidak bisa diubah karena mempengaruhi kode transaksi)
+                <div className="flex h-10 items-center rounded-md border border-input bg-muted/50 px-3 text-sm">
+                  {labelForHotelValue(
+                    (hotels.data ?? []).map((h) => ({ id: String(h.id), name: h.name })),
+                    hotelId,
+                  ) ?? hotelId}
+                </div>
+              ) : (
               <Select
                 value={hotelId ? String(hotelId) : undefined}
                 onValueChange={(v) => {
@@ -268,6 +345,7 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
                   ))}
                 </SelectContent>
               </Select>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Tanggal penjualan</Label>
@@ -478,6 +556,7 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
             <span className="font-bold tabular-nums">{formatIdr(grandPreview)}</span>
           </div>
         </div>
+        )}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
@@ -486,10 +565,14 @@ export function SalesTransactionFormDialog({ open, onOpenChange, onSuccess }: Pr
           <Button
             type="button"
             className="btn-gradient border-0"
-            disabled={!canSubmit || createTx.isPending}
-            onClick={() => createTx.mutate()}
+            disabled={!canSubmit || isPending || (isEditMode && editDetail.isLoading)}
+            onClick={() => (isEditMode ? updateTx.mutate() : createTx.mutate())}
           >
-            {createTx.isPending ? "Menyimpan…" : "Simpan faktur"}
+            {isPending
+              ? "Menyimpan…"
+              : isEditMode
+              ? "Simpan perubahan"
+              : "Simpan faktur"}
           </Button>
         </DialogFooter>
       </DialogContent>

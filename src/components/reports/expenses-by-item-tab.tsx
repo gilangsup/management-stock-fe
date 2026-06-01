@@ -2,7 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { Loader2, ShoppingCart } from "lucide-react";
+import { Loader2, ShoppingCart, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -12,9 +19,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatCard } from "@/components/ui/stat-card";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { escapeHtml, printHtmlDocument } from "@/lib/export-utils";
 import { formatDate, formatIdr } from "@/lib/format";
+import { APP_NAME, COMPANY_ADDRESS, COMPANY_PHONES } from "@/lib/brand";
 import { ReportExportActions } from "@/components/reports/report-export-actions";
 import {
   ReportDateFilter,
@@ -33,11 +43,35 @@ type ExpenseItemRow = {
   totalAmount: string;
 };
 
+const rekapStyles = `
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #111; margin: 12mm 14mm; }
+  .report-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 2px solid #222; padding-bottom: 8px; }
+  .company-block { flex: 1; }
+  .report-title { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; margin: 0 0 3px; }
+  .company-name { font-size: 11px; font-weight: 700; margin: 0 0 1px; }
+  .company-detail { font-size: 9px; color: #555; margin: 0; }
+  .periode-block { text-align: right; font-size: 10px; }
+  .periode-block p { margin: 0 0 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th, td { border: 1px solid #aaa; padding: 3px 6px; font-size: 9.5px; }
+  th { background: #e0e0e0; font-weight: 700; text-align: left; }
+  .num { text-align: right; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #f9f9f9; }
+  tfoot td { font-weight: 700; background: #e8e8e8; border-top: 2px solid #555; }
+  .summary-block { margin-top: 8px; display: flex; justify-content: flex-end; }
+  .summary-table { border-collapse: collapse; min-width: 260px; }
+  .summary-table td { border: 1px solid #aaa; padding: 3px 10px; font-size: 10px; }
+  .summary-table .label { font-weight: 700; }
+  .summary-table .val { text-align: right; }
+  @media print { body { margin: 8mm 10mm; } }
+`;
+
 export function ExpensesByItemTab() {
   const anchor = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [preset, setPreset] = useState<DatePreset>("month");
   const [customFrom, setCustomFrom] = useState(anchor);
   const [customTo, setCustomTo] = useState(anchor);
+  const [filterMaterialId, setFilterMaterialId] = useState("");
   const { from, to } = resolveDateRange(preset, customFrom, customTo);
 
   const query = useQuery({
@@ -51,61 +85,163 @@ export function ExpensesByItemTab() {
     },
   });
 
-  const rows = query.data?.data ?? [];
+  const allRows = query.data?.data ?? [];
+
+  // Filtered rows berdasarkan bahan baku yang dipilih
+  const rows = useMemo(
+    () =>
+      filterMaterialId
+        ? allRows.filter((r) => r.rawMaterialId === filterMaterialId)
+        : allRows,
+    [allRows, filterMaterialId],
+  );
+
   const grandTotal = useMemo(
     () => rows.reduce((s, r) => s + Number(r.totalAmount), 0),
     [rows],
   );
 
+  const filterLabel = filterMaterialId
+    ? (allRows.find((r) => r.rawMaterialId === filterMaterialId)?.name ?? filterMaterialId)
+    : "Semua bahan baku";
+
   const printPdf = useCallback(() => {
+    const totalQtyAll = rows.reduce((s, r) => s + Number(r.totalQty), 0);
     const body = rows
       .map(
         (r, i) =>
           `<tr>
             <td>${i + 1}</td>
-            <td>${escapeHtml(r.name)}<br><small>${escapeHtml(r.itemCode)}</small></td>
+            <td>${escapeHtml(r.name)} <small style="color:#666">${escapeHtml(r.itemCode)}</small></td>
             <td>${escapeHtml(r.unit.code)}</td>
-            <td class="text-right">${r.lineCount}</td>
-            <td class="text-right">${Number(r.totalQty).toLocaleString("id-ID")}</td>
-            <td class="text-right">${escapeHtml(formatIdr(r.totalAmount))}</td>
+            <td class="num">${r.lineCount}</td>
+            <td class="num">${Number(r.totalQty).toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+            <td class="num">${escapeHtml(formatIdr(r.totalAmount))}</td>
           </tr>`,
       )
       .join("");
     printHtmlDocument(
       `Belanja per item ${from}–${to}`,
-      `<h1>Belanja Harian per Item</h1>
-       <p class="meta">${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))}</p>
+      `<style>${rekapStyles}</style>
+       <div class="report-header">
+         <div class="company-block">
+           <p class="report-title">LAPORAN BELANJA PER ITEM</p>
+           <p class="company-name">${escapeHtml(APP_NAME)}</p>
+           <p class="company-detail">${escapeHtml(COMPANY_ADDRESS)}</p>
+           <p class="company-detail">${escapeHtml(COMPANY_PHONES)}</p>
+         </div>
+         <div class="periode-block">
+           <p><strong>PERIODE :</strong> ${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))}</p>
+           <p>Bahan baku : ${escapeHtml(filterLabel)}</p>
+         </div>
+       </div>
        <table>
-         <thead><tr><th>#</th><th>Bahan</th><th>Satuan</th><th class="text-right">Transaksi</th><th class="text-right">Total Qty</th><th class="text-right">Total Belanja</th></tr></thead>
+         <thead>
+           <tr>
+             <th>#</th>
+             <th>Bahan Baku</th>
+             <th>Satuan</th>
+             <th class="num">Transaksi</th>
+             <th class="num">Total Qty</th>
+             <th class="num">Total Belanja</th>
+           </tr>
+         </thead>
          <tbody>${body}</tbody>
-         <tfoot><tr><td colspan="5" class="text-right">Grand total</td><td class="text-right">${escapeHtml(formatIdr(grandTotal))}</td></tr></tfoot>
-       </table>`,
+         <tfoot>
+           <tr>
+             <td colspan="4"><strong>TOTAL KESELURUHAN :</strong></td>
+             <td class="num">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+             <td class="num">${escapeHtml(formatIdr(grandTotal))}</td>
+           </tr>
+         </tfoot>
+       </table>
+       <div class="summary-block">
+         <table class="summary-table">
+           <tr><td class="label">Total Qty</td><td class="label">:</td><td class="val">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td></tr>
+           <tr><td class="label">Total Belanja</td><td class="label">:</td><td class="val">${escapeHtml(formatIdr(grandTotal))}</td></tr>
+         </table>
+       </div>`,
     );
-  }, [rows, from, to, grandTotal]);
+  }, [rows, from, to, grandTotal, filterLabel]);
 
   return (
     <div className="space-y-4">
       <div className="surface-panel space-y-4 rounded-2xl border border-border p-4">
         <ReportDateFilter
           preset={preset}
-          onPresetChange={setPreset}
+          onPresetChange={(p) => {
+            setPreset(p);
+            setFilterMaterialId("");
+          }}
           customFrom={customFrom}
           customTo={customTo}
-          onCustomFromChange={setCustomFrom}
-          onCustomToChange={setCustomTo}
+          onCustomFromChange={(v) => {
+            setCustomFrom(v);
+            setFilterMaterialId("");
+          }}
+          onCustomToChange={(v) => {
+            setCustomTo(v);
+            setFilterMaterialId("");
+          }}
         />
+
+        {/* Filter bahan baku */}
+        <div className="space-y-2">
+          <Label>Filter bahan baku</Label>
+          <div className="flex items-center gap-2">
+            <Select
+              value={filterMaterialId || "__all__"}
+              onValueChange={(v) => setFilterMaterialId(!v || v === "__all__" ? "" : v)}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue>
+                  {filterMaterialId
+                    ? (allRows.find((r) => r.rawMaterialId === filterMaterialId)?.name ?? filterMaterialId)
+                    : "Semua bahan baku"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="__all__">Semua bahan baku</SelectItem>
+                {allRows.map((r) => (
+                  <SelectItem key={r.rawMaterialId} value={r.rawMaterialId}>
+                    <span className="font-medium">{r.name}</span>
+                    <span className="ml-2 font-mono text-xs text-muted-foreground">{r.itemCode}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {filterMaterialId && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                onClick={() => setFilterMaterialId("")}
+              >
+                <X className="size-4" />
+              </Button>
+            )}
+          </div>
+          {filterMaterialId && (
+            <p className="text-xs text-muted-foreground">
+              Menampilkan akumulasi untuk <strong>{filterLabel}</strong> saja.
+            </p>
+          )}
+        </div>
+
         <ReportResetButton
           onReset={() => {
             setPreset("month");
             setCustomFrom(anchor);
             setCustomTo(anchor);
+            setFilterMaterialId("");
           }}
         />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StatCard label="Total belanja" icon={ShoppingCart} tone="emerald" className="min-w-[200px]">
-          {formatIdr(grandTotal)}
+          {formatIdr(String(grandTotal))}
         </StatCard>
         <ReportExportActions
           exportPath="/reports/expenses-by-item/export"

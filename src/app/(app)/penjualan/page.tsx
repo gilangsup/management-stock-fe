@@ -1,16 +1,25 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Eye, Plus, Store } from "lucide-react";
+import { Eye, Pencil, Plus, Store, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { DateField } from "@/components/forms/date-field";
 import { AppShell } from "@/components/layout/app-shell";
 import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { SalesTransactionFormDialog } from "@/components/sales/sales-transaction-form-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -27,6 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { formatDate, formatIdr } from "@/lib/format";
 import { labelForHotelValue } from "@/lib/select-labels";
 import type { SalesInvoiceListItem, SalesListMeta } from "@/types/sales";
@@ -39,11 +49,14 @@ const PAGE_SIZE = 20;
 
 export default function PenjualanListPage() {
   const router = useRouter();
+  const qc = useQueryClient();
   const [hotelFilter, setHotelFilter] = useState(FILTER_ALL);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SalesInvoiceListItem | null>(null);
 
   const hotels = useQuery({
     queryKey: ["hotels"],
@@ -73,6 +86,21 @@ export default function PenjualanListPage() {
         rows: data.data,
         meta: data.meta,
       };
+    },
+  });
+
+  const deleteTx = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/sales-transactions/${id}`);
+    },
+    onSuccess: () => {
+      toast.success("Faktur penjualan berhasil dihapus");
+      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ["sales-transactions"] });
+    },
+    onError: (e) => {
+      toast.error(getApiErrorMessage(e, "Gagal menghapus faktur"));
+      setDeleteTarget(null);
     },
   });
 
@@ -222,16 +250,37 @@ export default function PenjualanListPage() {
                       {formatIdr(row.grandTotal)}
                     </TableCell>
                     <TableCell>
-                      <Link
-                        href={`/penjualan/${row.id}`}
-                        className={cn(
-                          buttonVariants({ variant: "outline", size: "sm" }),
-                          "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10",
-                        )}
-                      >
-                        <Eye className="mr-1 size-3.5" />
-                        Detail
-                      </Link>
+                      <div className="flex items-center justify-end gap-1">
+                        <Link
+                          href={`/penjualan/${row.id}`}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "border-primary/30 bg-primary/5 text-primary hover:bg-primary/10",
+                          )}
+                        >
+                          <Eye className="mr-1 size-3.5" />
+                          Detail
+                        </Link>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          title="Edit"
+                          onClick={() => setEditId(row.id)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          title="Hapus"
+                          className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setDeleteTarget(row)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -279,11 +328,48 @@ export default function PenjualanListPage() {
         </p>
       </div>
 
+      {/* Create dialog */}
       <SalesTransactionFormDialog
         open={addOpen}
         onOpenChange={setAddOpen}
         onSuccess={(invoiceId) => router.push(`/penjualan/${invoiceId}`)}
       />
+
+      {/* Edit dialog */}
+      <SalesTransactionFormDialog
+        open={!!editId}
+        onOpenChange={(o) => { if (!o) setEditId(null); }}
+        editId={editId}
+        onSuccess={() => setEditId(null)}
+      />
+
+      {/* Delete confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hapus faktur penjualan?</DialogTitle>
+            <DialogDescription>
+              Faktur{" "}
+              <span className="font-semibold">{deleteTarget?.transactionCode}</span> untuk hotel{" "}
+              <span className="font-semibold">{deleteTarget?.hotelName}</span> akan dihapus
+              permanen. Tindakan ini tidak dapat dibatalkan.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setDeleteTarget(null)}>
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteTx.isPending}
+              onClick={() => deleteTarget && deleteTx.mutate(deleteTarget.id)}
+            >
+              {deleteTx.isPending ? "Menghapus…" : "Hapus"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
