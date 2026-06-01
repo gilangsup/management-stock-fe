@@ -42,7 +42,7 @@ export function OrderExportActions({ date, kind, onPrintPdf, disabled }: Props) 
     try {
       onPrintPdf();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Gagal membuka cetak PDF");
+      toast.error(e instanceof Error ? e.message : "Gagal mencetak PDF");
     }
   };
 

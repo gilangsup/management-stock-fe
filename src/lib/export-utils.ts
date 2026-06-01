@@ -54,20 +54,52 @@ const PRINT_STYLES = `
   @media print { body { margin: 12px; } }
 `;
 
-/** Buka jendela cetak untuk export PDF via dialog print browser. */
+/**
+ * Cetak dokumen HTML via dialog print browser.
+ * Menggunakan hidden iframe agar tidak diblokir sebagai popup di mobile/tablet.
+ */
 export function printHtmlDocument(title: string, bodyHtml: string): void {
-  const win = window.open("", "_blank");
-  if (!win) {
-    throw new Error("Popup diblokir browser. Izinkan popup untuk cetak PDF.");
+  // Hapus iframe lama jika masih ada
+  document.getElementById("__print_iframe__")?.remove();
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}</style></head><body>${bodyHtml}</body></html>`;
+
+  const iframe = document.createElement("iframe");
+  iframe.id = "__print_iframe__";
+  // Sembunyikan iframe — tidak boleh display:none karena beberapa browser tidak bisa print dari sana
+  iframe.style.cssText =
+    "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;opacity:0;";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+  if (!doc) {
+    iframe.remove();
+    throw new Error("Tidak dapat membuat halaman cetak.");
   }
-  win.document.write(
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}</style></head><body>${bodyHtml}</body></html>`,
-  );
-  win.document.close();
-  win.onload = () => {
-    win.focus();
-    setTimeout(() => win.print(), 250);
-  };
+
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  const win = iframe.contentWindow;
+  if (!win) {
+    iframe.remove();
+    throw new Error("Tidak dapat mengakses halaman cetak.");
+  }
+
+  function doPrint() {
+    win!.focus();
+    win!.print();
+    // Hapus iframe setelah dialog print ditutup
+    setTimeout(() => document.getElementById("__print_iframe__")?.remove(), 3000);
+  }
+
+  // Jika dokumen sudah selesai dimuat, langsung cetak; jika belum, tunggu onload
+  if (doc.readyState === "complete") {
+    setTimeout(doPrint, 100);
+  } else {
+    win.onload = () => setTimeout(doPrint, 100);
+  }
 }
 
 function escapeHtml(s: string): string {
