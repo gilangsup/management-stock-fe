@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Loader2, Package } from "lucide-react";
+import { toast } from "sonner";
 import {
   Table,
   TableBody,
@@ -15,6 +16,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { api } from "@/lib/api";
 import { escapeHtml, printHtmlDocument } from "@/lib/export-utils";
 import { formatDate, formatIdr } from "@/lib/format";
+import { APP_NAME, COMPANY_ADDRESS, COMPANY_PHONES } from "@/lib/brand";
 import { ReportExportActions } from "@/components/reports/report-export-actions";
 import {
   ReportDateFilter,
@@ -25,6 +27,38 @@ import {
 } from "@/components/reports/report-filters";
 
 type Hotel = { id: string; name: string };
+
+type InvoiceListRow = {
+  id: string;
+  transactionCode: string;
+  saleDate: string;
+  grandTotal: string;
+  totalQty: string;
+  hotel: { code: string; name: string };
+};
+
+const rekapStyles = `
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #111; margin: 12mm 14mm; }
+  .report-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 2px solid #222; padding-bottom: 8px; }
+  .company-block { flex: 1; }
+  .report-title { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; margin: 0 0 3px; }
+  .company-name { font-size: 11px; font-weight: 700; margin: 0 0 1px; }
+  .company-detail { font-size: 9px; color: #555; margin: 0; }
+  .periode-block { text-align: right; font-size: 10px; }
+  .periode-block p { margin: 0 0 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th, td { border: 1px solid #aaa; padding: 3px 6px; font-size: 9.5px; }
+  th { background: #e0e0e0; font-weight: 700; text-align: left; }
+  .num { text-align: right; white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #f9f9f9; }
+  tfoot td { font-weight: 700; background: #e8e8e8; border-top: 2px solid #555; }
+  .summary-block { margin-top: 8px; display: flex; justify-content: flex-end; }
+  .summary-table { border-collapse: collapse; min-width: 260px; }
+  .summary-table td { border: 1px solid #aaa; padding: 3px 10px; font-size: 10px; }
+  .summary-table .label { font-weight: 700; }
+  .summary-table .val { text-align: right; }
+  @media print { body { margin: 8mm 10mm; } }
+`;
 
 type SalesProductRow = {
   finishedProductId: string;
@@ -74,31 +108,81 @@ export function SalesByProductTab() {
     ? (hotels.data?.find((h) => h.id === hotelId)?.name ?? hotelId)
     : "Semua hotel";
 
-  const printPdf = useCallback(() => {
-    const body = rows
-      .map(
-        (r, i) =>
-          `<tr>
-            <td>${i + 1}</td>
-            <td>${escapeHtml(r.productName)}<br><small>${escapeHtml(r.itemCode)}</small></td>
-            <td>${escapeHtml(r.unit.code)}</td>
-            <td class="text-right">${r.invoiceCount}</td>
-            <td class="text-right">${Number(r.totalQty).toLocaleString("id-ID")}</td>
-            <td class="text-right">${escapeHtml(formatIdr(r.totalAmount))}</td>
-          </tr>`,
-      )
-      .join("");
-    printHtmlDocument(
-      `Penjualan per produk ${from}–${to}`,
-      `<h1>Penjualan per Barang Jadi</h1>
-       <p class="meta">${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))} · ${escapeHtml(hotelLabel)}</p>
-       <table>
-         <thead><tr><th>#</th><th>Produk</th><th>Satuan</th><th class="text-right">Faktur</th><th class="text-right">Total Qty</th><th class="text-right">Total Penjualan</th></tr></thead>
-         <tbody>${body}</tbody>
-         <tfoot><tr><td colspan="5" class="text-right">Grand total</td><td class="text-right">${escapeHtml(formatIdr(grandTotal))}</td></tr></tfoot>
-       </table>`,
-    );
-  }, [rows, from, to, grandTotal, hotelLabel]);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const printPdf = useCallback(async () => {
+    setIsPrinting(true);
+    try {
+      const params: Record<string, string> = { from, to, groupBy: "none", limit: "1000", page: "1" };
+      if (hotelId) params.hotelId = hotelId;
+      const { data: res } = await api.get<{
+        data: { mode: string; invoices: InvoiceListRow[]; grandTotal: string };
+      }>("/reports/sales-invoices", { params });
+
+      const invoices: InvoiceListRow[] = res.data.mode === "list" ? res.data.invoices : [];
+      const grandInvoiceTotal = res.data.grandTotal ?? "0";
+      const totalQtyAll = invoices.reduce((s, r) => s + Number(r.totalQty), 0);
+
+      const body = invoices
+        .map(
+          (r) =>
+            `<tr>
+              <td>${escapeHtml(r.transactionCode)}</td>
+              <td>${escapeHtml(formatDate(r.saleDate))}</td>
+              <td>${escapeHtml(r.hotel.code)}</td>
+              <td class="num">${Number(r.totalQty).toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+              <td class="num">${escapeHtml(formatIdr(r.grandTotal))}</td>
+            </tr>`,
+        )
+        .join("");
+
+      printHtmlDocument(
+        `Penjualan ${from}–${to}`,
+        `<style>${rekapStyles}</style>
+         <div class="report-header">
+           <div class="company-block">
+             <p class="report-title">LAPORAN PENJUALAN REKAP</p>
+             <p class="company-name">${escapeHtml(APP_NAME)}</p>
+             <p class="company-detail">${escapeHtml(COMPANY_ADDRESS)}</p>
+             <p class="company-detail">${escapeHtml(COMPANY_PHONES)}</p>
+           </div>
+           <div class="periode-block">
+             <p><strong>PERIODE :</strong> ${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))}</p>
+             <p>Hotel : ${escapeHtml(hotelLabel)}</p>
+           </div>
+         </div>
+         <table>
+           <thead>
+             <tr>
+               <th>No Transaksi</th>
+               <th>Tanggal</th>
+               <th>Kode Pelanggan</th>
+               <th class="num">Jml Item</th>
+               <th class="num">Sub Total</th>
+             </tr>
+           </thead>
+           <tbody>${body || '<tr><td colspan="5" style="text-align:center;color:#999">Tidak ada data</td></tr>'}</tbody>
+           <tfoot>
+             <tr>
+               <td colspan="3"><strong>TOTAL KESELURUHAN :</strong></td>
+               <td class="num">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+               <td class="num">${escapeHtml(formatIdr(grandInvoiceTotal))}</td>
+             </tr>
+           </tfoot>
+         </table>
+         <div class="summary-block">
+           <table class="summary-table">
+             <tr><td class="label">Jumlah Item</td><td class="label">:</td><td class="val">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td></tr>
+             <tr><td class="label">Sub Total</td><td class="label">:</td><td class="val">${escapeHtml(formatIdr(grandInvoiceTotal))}</td></tr>
+           </table>
+         </div>`,
+      );
+    } catch {
+      toast.error("Gagal memuat data untuk PDF");
+    } finally {
+      setIsPrinting(false);
+    }
+  }, [from, to, hotelId, hotelLabel]);
 
   return (
     <div className="space-y-4">
@@ -133,8 +217,8 @@ export function SalesByProductTab() {
         <ReportExportActions
           exportPath="/reports/sales-by-product/export"
           params={{ from, to, hotelId: hotelId || undefined }}
-          onPrintPdf={printPdf}
-          disabled={!rows.length || query.isLoading}
+          onPrintPdf={() => void printPdf()}
+          disabled={!rows.length || query.isLoading || isPrinting}
           label="penjualan per produk"
         />
       </div>

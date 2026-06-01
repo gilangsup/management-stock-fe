@@ -62,8 +62,8 @@ export default function ReceiptPrintPage() {
       />
 
       {/* Toolbar — hanya tampil di layar, tersembunyi saat print */}
-      <div className="kwitansi-print-toolbar fixed bottom-4 left-1/2 z-50 -translate-x-1/2 flex flex-col items-center gap-3 print:hidden">
-        <div className="flex flex-col gap-1.5 rounded-lg bg-white px-4 py-3 shadow-lg border w-96">
+      <div className="kwitansi-print-toolbar fixed bottom-0 left-0 right-0 z-50 flex flex-col items-center gap-2 bg-white/95 backdrop-blur-sm border-t shadow-lg px-4 py-3 print:hidden sm:bottom-4 sm:left-1/2 sm:right-auto sm:w-auto sm:-translate-x-1/2 sm:rounded-xl sm:border sm:bg-white sm:px-5 sm:py-4">
+        <div className="w-full max-w-sm space-y-1.5 sm:w-80">
           <Label className="text-sm font-medium">Untuk pembayaran:</Label>
           <textarea
             value={untukPembayaran}
@@ -73,10 +73,10 @@ export default function ReceiptPrintPage() {
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <p className="text-[11px] text-muted-foreground">
-            Tekan Enter untuk baris baru — semua baris akan tercetak.
+            Enter untuk baris baru — semua baris tercetak.
           </p>
         </div>
-        <Button type="button" onClick={() => window.print()} className="btn-gradient border-0">
+        <Button type="button" onClick={() => window.print()} className="btn-gradient w-full max-w-sm border-0 sm:w-80">
           Cetak / Simpan PDF
         </Button>
       </div>
