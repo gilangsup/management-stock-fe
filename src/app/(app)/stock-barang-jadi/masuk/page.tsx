@@ -11,30 +11,41 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FinishedProductCombobox } from "@/components/inventory/finished-product-combobox";
-import type { FinishedProductStockMovementRow } from "@/components/inventory/types";
+import { UnitSelect } from "@/components/inventory/unit-select";
+import { useInventoryMasters } from "@/components/inventory/use-inventory-masters";
+import type { FinishedProductRow, FinishedProductStockMovementRow } from "@/components/inventory/types";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatIntegerQty } from "@/lib/format";
 
 export default function StockBarangMasukPage() {
   const qc = useQueryClient();
+  const { units } = useInventoryMasters();
+  const unitRows = units.data?.data ?? [];
   const anchor = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [finishedProductId, setFinishedProductId] = useState("");
+  const [unitId, setUnitId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [productionDate, setProductionDate] = useState(anchor);
-  const [picName, setPicName] = useState("");
+  const [keterangan, setKeterangan] = useState("");
+
+  const handleProductSelect = (product: FinishedProductRow | null) => {
+    setUnitId(product?.unit?.id ? String(product.unit.id) : "");
+  };
 
   const submit = useMutation({
     mutationFn: async () => {
       const q = Math.floor(Number(quantity));
       if (!Number.isFinite(q) || q < 1) throw new Error("QTY");
+      if (!unitId) throw new Error("UNIT");
       const { data } = await api.post<{ success: boolean; data: FinishedProductStockMovementRow }>(
         "/finished-products/stock-movements/in",
         {
           finishedProductId,
           quantity: q,
           productionDate,
-          picName: picName.trim(),
+          keterangan: keterangan.trim(),
+          unitId,
         },
       );
       return data;
@@ -47,16 +58,23 @@ export default function StockBarangMasukPage() {
           : "Stok masuk tercatat.",
       );
       setFinishedProductId("");
+      setUnitId("");
       setQuantity("1");
       setProductionDate(anchor);
-      setPicName("");
+      setKeterangan("");
       qc.invalidateQueries({ queryKey: ["finished-products"] });
       qc.invalidateQueries({ queryKey: ["finished-product-stock-movements"] });
     },
     onError: (err: unknown) => {
-      if (err instanceof Error && err.message === "QTY") {
-        toast.error("Isi kuantitas bilangan bulat ≥ 1.");
-        return;
+      if (err instanceof Error) {
+        if (err.message === "QTY") {
+          toast.error("Isi kuantitas bilangan bulat ≥ 1.");
+          return;
+        }
+        if (err.message === "UNIT") {
+          toast.error("Pilih satuan barang jadi.");
+          return;
+        }
       }
       if (isAxiosError(err)) {
         const d = err.response?.data as { error?: string } | undefined;
@@ -71,7 +89,8 @@ export default function StockBarangMasukPage() {
 
   const canSubmit =
     finishedProductId &&
-    picName.trim() &&
+    unitId &&
+    keterangan.trim() &&
     Number.isFinite(Math.floor(Number(quantity))) &&
     Math.floor(Number(quantity)) >= 1;
 
@@ -79,13 +98,13 @@ export default function StockBarangMasukPage() {
     <>
       <PageHeader
         title="Stock barang masuk"
-        description="Menambah stok global per SKU (master barang jadi). Isi tanggal pembuatan dan PIC."
+        description="Menambah stok global per SKU. Pilih barang, satuan, kuantitas, tanggal pembuatan, dan keterangan."
       />
       <Card className="max-w-lg border-border">
         <CardHeader>
           <CardTitle className="text-base">Catat produksi / stok masuk</CardTitle>
           <CardDescription>
-            Pilih barang dari master, kuantitas, tanggal pembuatan, dan nama penanggung jawab.
+            Satuan mengikuti master barang jadi — dapat disesuaikan per item sebelum menyimpan.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -94,15 +113,22 @@ export default function StockBarangMasukPage() {
             <FinishedProductCombobox
               value={finishedProductId}
               onChange={setFinishedProductId}
+              onProductSelect={handleProductSelect}
               disabled={submit.isPending}
             />
           </div>
+          <UnitSelect
+            value={unitId}
+            onChange={setUnitId}
+            units={unitRows}
+            disabled={submit.isPending || !finishedProductId}
+          />
           <div className="space-y-2">
             <Label>Tanggal pembuatan</Label>
             <DateField value={productionDate} onChange={setProductionDate} />
           </div>
           <div className="space-y-2">
-            <Label>Kuantitas</Label>
+            <Label>Kuantitas{unitId ? ` (${unitRows.find((u) => u.id === unitId)?.code ?? ""})` : ""}</Label>
             <Input
               inputMode="numeric"
               value={quantity}
@@ -112,11 +138,11 @@ export default function StockBarangMasukPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label>Nama PIC</Label>
+            <Label>Keterangan</Label>
             <Input
-              value={picName}
-              onChange={(e) => setPicName(e.target.value)}
-              placeholder="Penanggung jawab"
+              value={keterangan}
+              onChange={(e) => setKeterangan(e.target.value)}
+              placeholder="Contoh: produksi pagi, batch A"
               autoComplete="name"
               disabled={submit.isPending}
             />

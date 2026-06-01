@@ -92,6 +92,24 @@ function _terbilang(n: number): string {
   return result.trim();
 }
 
+/** Tanggal panjang: 06 April 2020 */
+export function formatDateLong(isoDate: string) {
+  const d = new Date(isoDate + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/** Angka untuk baris Rp kwitansi: 3,000,000 */
+export function formatIdrAmountLine(value: string | number) {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(n)) return "0";
+  return Math.round(n).toLocaleString("en-US");
+}
+
 /** Konversi angka ke teks Rupiah (terbilang). Contoh: 35500 → "Tiga Puluh Lima Ribu Lima Ratus Rupiah" */
 export function terbilang(value: string | number): string {
   const n = typeof value === "string" ? Number(value) : value;
@@ -99,4 +117,42 @@ export function terbilang(value: string | number): string {
   const int = Math.floor(n);
   if (int === 0) return "Nol Rupiah";
   return _terbilang(int) + " Rupiah";
+}
+
+/** Terbilang uppercase — untuk field UANG SEJUMLAH pada kwitansi. */
+export function terbilangUpper(value: string | number): string {
+  return terbilang(value).toUpperCase();
+}
+
+/** Terbilang lowercase — untuk footer faktur penjualan. */
+export function terbilangLower(value: string | number): string {
+  return terbilang(value).toLowerCase();
+}
+
+/** Format angka faktur: 18.000,00 */
+export function formatInvoiceAmount(value: string | number, fractionDigits = 2): string {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(n)) return "0,00";
+  return n.toLocaleString("de-DE", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+}
+
+/** Tanggal faktur: 09/04/2026 20:36:05 */
+export function formatInvoiceDateTime(isoDate: string, createdAt?: string | null): string {
+  const datePart = isoDate.includes("T") ? isoDate.slice(0, 10) : isoDate;
+  const d = new Date(`${datePart}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  let time = "00:00:00";
+  if (createdAt) {
+    const t = new Date(createdAt);
+    if (!Number.isNaN(t.getTime())) {
+      time = t.toLocaleTimeString("en-GB", { hour12: false });
+    }
+  }
+  return `${dd}/${mm}/${yyyy} ${time}`;
 }

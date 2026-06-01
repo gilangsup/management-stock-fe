@@ -1,11 +1,20 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getToken } from "@/lib/auth-storage";
+import { getToken, getStoredUser } from "@/lib/auth-storage";
+import { STAFF_ALLOWED_PATHS } from "@/components/layout/main-nav";
+
+/** Periksa apakah pathname diizinkan untuk role staff. */
+function isPathAllowedForStaff(pathname: string): boolean {
+  return STAFF_ALLOWED_PATHS.some(
+    (allowed) => pathname === allowed || pathname.startsWith(`${allowed}/`),
+  );
+}
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -13,9 +22,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
+
+    const user = getStoredUser();
+    if (user?.role === "staff" && !isPathAllowedForStaff(pathname)) {
+      router.replace("/expenses");
+      return;
+    }
+
     // eslint-disable-next-line react-hooks/set-state-in-effect -- gate client-only setelah cek token
     setReady(true);
-  }, [router]);
+  }, [router, pathname]);
 
   if (!ready) {
     return (

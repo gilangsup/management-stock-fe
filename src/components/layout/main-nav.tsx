@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   Boxes,
+  ClipboardList,
   LayoutDashboard,
   Package,
   Receipt,
@@ -14,25 +15,80 @@ import {
   Wallet,
 } from "lucide-react";
 import logoSoka from "@/assets/logo_soka.png";
+import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { cn } from "@/lib/utils";
+
+/** Role yang dikenali di sisi frontend. */
+export type AppRole = "admin" | "user" | "staff";
 
 /** Item menu utama aplikasi — satu sumber untuk sidebar desktop & sheet mobile. */
 export type MainNavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /**
+   * Role yang boleh melihat item ini.
+   * Jika undefined → semua role bisa melihat.
+   */
+  allowedRoles?: AppRole[];
 };
 
+/** Daftar route yang boleh diakses role 'staff'. */
+export const STAFF_ALLOWED_PATHS = ["/expenses", "/stock-barang-jadi"];
+
 export const MAIN_NAV_ITEMS: MainNavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/stock/bahan-baku", label: "Master Data", icon: Package },
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/stock/bahan-baku",
+    label: "Master Data",
+    icon: Package,
+    allowedRoles: ["admin", "user"],
+  },
   { href: "/stock-barang-jadi", label: "Stock barang jadi", icon: Boxes },
   { href: "/expenses", label: "Belanja harian", icon: ShoppingCart },
-  { href: "/penjualan", label: "List Penjualan", icon: Store },
-  { href: "/invoice-exchange", label: "Penukaran faktur", icon: Receipt },
-  { href: "/receivables", label: "Piutang", icon: Wallet },
-  { href: "/reports", label: "Laporan", icon: BarChart3 },
+  {
+    href: "/pesanan-harian",
+    label: "Pesanan harian",
+    icon: ClipboardList,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/penjualan",
+    label: "List Penjualan",
+    icon: Store,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/invoice-exchange",
+    label: "Penukaran faktur",
+    icon: Receipt,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/receivables",
+    label: "Piutang",
+    icon: Wallet,
+    allowedRoles: ["admin", "user"],
+  },
+  {
+    href: "/reports",
+    label: "Laporan",
+    icon: BarChart3,
+    allowedRoles: ["admin", "user"],
+  },
 ];
+
+/** Kembalikan daftar item yang boleh dilihat oleh role tertentu. */
+export function getNavItemsForRole(role: string | undefined): MainNavItem[] {
+  return MAIN_NAV_ITEMS.filter(
+    (item) => !item.allowedRoles || item.allowedRoles.includes(role as AppRole),
+  );
+}
 
 export function isMainNavActive(pathname: string, href: string): boolean {
   if (href === "/stock/bahan-baku") {
@@ -40,6 +96,7 @@ export function isMainNavActive(pathname: string, href: string): boolean {
   }
   if (href === "/stock-barang-jadi") return pathname.startsWith("/stock-barang-jadi");
   if (href === "/penjualan") return pathname.startsWith("/penjualan");
+  if (href === "/pesanan-harian") return pathname.startsWith("/pesanan-harian");
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -52,8 +109,8 @@ export function MainNavBrand({ className }: MainNavBrandProps) {
         <Image src={logoSoka} alt="Soka Frozen" width={36} height={36} className="object-contain" />
       </div>
       <div>
-        <p className="text-sm font-semibold leading-tight text-sidebar-foreground">Soka Frozen</p>
-        <p className="text-xs text-sidebar-foreground/70">Operasi bisnis</p>
+        <p className="text-sm font-semibold leading-tight text-sidebar-foreground">{APP_NAME}</p>
+        <p className="text-xs text-sidebar-foreground/70">{APP_TAGLINE}</p>
       </div>
     </div>
   );
@@ -61,14 +118,16 @@ export function MainNavBrand({ className }: MainNavBrandProps) {
 
 type MainNavLinksProps = {
   pathname: string;
+  role?: string;
   /** Dipanggil setelah navigasi (mis. menutup sheet mobile). */
   onNavigate?: () => void;
 };
 
-export function MainNavLinks({ pathname, onNavigate }: MainNavLinksProps) {
+export function MainNavLinks({ pathname, role, onNavigate }: MainNavLinksProps) {
+  const items = getNavItemsForRole(role);
   return (
     <nav className="relative flex flex-1 flex-col gap-1 p-3" aria-label="Menu utama">
-      {MAIN_NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = isMainNavActive(pathname, item.href);
         const Icon = item.icon;
         return (

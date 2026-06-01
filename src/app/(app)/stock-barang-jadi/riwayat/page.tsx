@@ -51,8 +51,8 @@ export default function RiwayatStokBarangJadiPage() {
   const [direction, setDirection] = useState<"" | "in" | "out">("");
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [picSearchInput, setPicSearchInput] = useState("");
-  const [debouncedPicSearch, setDebouncedPicSearch] = useState("");
+  const [keteranganSearchInput, setKeteranganSearchInput] = useState("");
+  const [debouncedKeteranganSearch, setDebouncedKeteranganSearch] = useState("");
   const [eventDateFrom, setEventDateFrom] = useState("");
   const [eventDateTo, setEventDateTo] = useState("");
 
@@ -60,7 +60,7 @@ export default function RiwayatStokBarangJadiPage() {
   const [deleteRow, setDeleteRow] = useState<FinishedProductStockMovementRow | null>(null);
 
   const [editQty, setEditQty] = useState("");
-  const [editPic, setEditPic] = useState("");
+  const [editKeterangan, setEditKeterangan] = useState("");
   const [editProductionDate, setEditProductionDate] = useState("");
   const [editPickupDate, setEditPickupDate] = useState("");
 
@@ -70,18 +70,18 @@ export default function RiwayatStokBarangJadiPage() {
   }, [searchInput]);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedPicSearch(picSearchInput.trim()), 300);
+    const t = window.setTimeout(() => setDebouncedKeteranganSearch(keteranganSearchInput.trim()), 300);
     return () => window.clearTimeout(t);
-  }, [picSearchInput]);
+  }, [keteranganSearchInput]);
 
   useEffect(() => {
     setPage(1);
-  }, [direction, debouncedSearch, debouncedPicSearch, eventDateFrom, eventDateTo]);
+  }, [direction, debouncedSearch, debouncedKeteranganSearch, eventDateFrom, eventDateTo]);
 
   useEffect(() => {
     if (!editRow) return;
     setEditQty(String(editRow.quantity));
-    setEditPic(editRow.picName);
+    setEditKeterangan(editRow.keterangan ?? editRow.picName);
     const pd = editRow.productionDate;
     const pk = editRow.pickupDate;
     setEditProductionDate(pd ? pd.slice(0, 10) : "");
@@ -94,7 +94,7 @@ export default function RiwayatStokBarangJadiPage() {
       page,
       direction,
       debouncedSearch,
-      debouncedPicSearch,
+      debouncedKeteranganSearch,
       eventDateFrom,
       eventDateTo,
     ],
@@ -105,7 +105,7 @@ export default function RiwayatStokBarangJadiPage() {
       };
       if (direction) params.direction = direction;
       if (debouncedSearch) params.search = debouncedSearch;
-      if (debouncedPicSearch) params.picSearch = debouncedPicSearch;
+      if (debouncedKeteranganSearch) params.keteranganSearch = debouncedKeteranganSearch;
       if (eventDateFrom) params.eventDateFrom = eventDateFrom;
       if (eventDateTo) params.eventDateTo = eventDateTo;
       const { data } = await api.get<ApiListResponse<FinishedProductStockMovementRow>>(
@@ -123,7 +123,7 @@ export default function RiwayatStokBarangJadiPage() {
       if (!Number.isFinite(q) || q < 1) throw new Error("QTY");
       const body: Record<string, unknown> = {
         quantity: q,
-        picName: editPic.trim(),
+        keterangan: editKeterangan.trim(),
       };
       if (editRow.direction === "in") {
         if (!editProductionDate) throw new Error("DATE");
@@ -178,7 +178,7 @@ export default function RiwayatStokBarangJadiPage() {
 
   const canSubmitEdit =
     editRow &&
-    editPic.trim() &&
+    editKeterangan.trim() &&
     Number.isFinite(Math.floor(Number(editQty))) &&
     Math.floor(Number(editQty)) >= 1 &&
     (editRow.direction === "in" ? !!editProductionDate : !!editPickupDate);
@@ -213,11 +213,11 @@ export default function RiwayatStokBarangJadiPage() {
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label>Filter nama PIC</Label>
+            <Label>Filter keterangan</Label>
             <Input
-              placeholder="Partial match nama PIC…"
-              value={picSearchInput}
-              onChange={(e) => setPicSearchInput(e.target.value)}
+              placeholder="Partial match keterangan…"
+              value={keteranganSearchInput}
+              onChange={(e) => setKeteranganSearchInput(e.target.value)}
             />
           </div>
           <div className="space-y-2">
@@ -237,8 +237,8 @@ export default function RiwayatStokBarangJadiPage() {
             onClick={() => {
               setSearchInput("");
               setDebouncedSearch("");
-              setPicSearchInput("");
-              setDebouncedPicSearch("");
+              setKeteranganSearchInput("");
+              setDebouncedKeteranganSearch("");
               setEventDateFrom("");
               setEventDateTo("");
               setDirection("");
@@ -256,8 +256,9 @@ export default function RiwayatStokBarangJadiPage() {
               <TableHead>Tanggal kejadian</TableHead>
               <TableHead>Arah</TableHead>
               <TableHead>Barang</TableHead>
+              <TableHead>Satuan</TableHead>
               <TableHead className="text-right">Qty</TableHead>
-              <TableHead>PIC</TableHead>
+              <TableHead>Keterangan</TableHead>
               <TableHead>Dicatat</TableHead>
               <TableHead className="text-right">Saldo setelah</TableHead>
               <TableHead className="w-[120px] text-right">Aksi</TableHead>
@@ -278,10 +279,13 @@ export default function RiwayatStokBarangJadiPage() {
                     {row.finishedProduct.itemCode}
                   </span>
                 </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {row.finishedProduct.unit?.code ?? "—"}
+                </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatIntegerQty(row.quantity)}
                 </TableCell>
-                <TableCell className="text-sm">{row.picName}</TableCell>
+                <TableCell className="text-sm">{row.keterangan ?? row.picName}</TableCell>
                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                   {formatDateTimeId(row.createdAt)}
                 </TableCell>
@@ -315,7 +319,7 @@ export default function RiwayatStokBarangJadiPage() {
             ))}
             {!list.data?.data?.length && (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                   {list.isLoading ? "Memuat…" : "Belum ada riwayat untuk filter ini."}
                 </TableCell>
               </TableRow>
@@ -388,10 +392,10 @@ export default function RiwayatStokBarangJadiPage() {
               </div>
             ) : null}
             <div className="space-y-2">
-              <Label>Nama PIC</Label>
+              <Label>Keterangan</Label>
               <Input
-                value={editPic}
-                onChange={(e) => setEditPic(e.target.value)}
+                value={editKeterangan}
+                onChange={(e) => setEditKeterangan(e.target.value)}
                 disabled={patchMovement.isPending}
               />
             </div>
@@ -420,8 +424,8 @@ export default function RiwayatStokBarangJadiPage() {
               {deleteRow ? (
                 <>
                   {deleteRow.direction === "in" ? "Masuk" : "Keluar"} ·{" "}
-                  {deleteRow.finishedProduct.name} · qty {formatIntegerQty(deleteRow.quantity)} · PIC{" "}
-                  {deleteRow.picName}. Stok master akan disesuaikan di server.
+                  {deleteRow.finishedProduct.name} · qty {formatIntegerQty(deleteRow.quantity)} ·{" "}
+                  {deleteRow.keterangan ?? deleteRow.picName}. Stok master akan disesuaikan di server.
                 </>
               ) : null}
             </p>

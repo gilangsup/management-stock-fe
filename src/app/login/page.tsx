@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
+import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import { setAuth } from "@/lib/auth-storage";
 
 export default function LoginPage() {
@@ -63,8 +64,8 @@ export default function LoginPage() {
           <Image src={logoSoka} alt="Soka Frozen" width={52} height={52} className="object-contain" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight drop-shadow-sm">Soka Frozen</h1>
-          <p className="text-sm font-medium text-white/85">Manajemen stok</p>
+          <h1 className="text-2xl font-bold tracking-tight drop-shadow-sm">{APP_NAME}</h1>
+          <p className="text-sm font-medium text-white/85">{APP_TAGLINE}</p>
         </div>
       </div>
 
