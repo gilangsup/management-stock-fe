@@ -30,9 +30,8 @@ export function FakturPenjualanPrintLayout({ data }: Props) {
       <div className="faktur-sheet">
         <header className="faktur-header">
           <div className="faktur-brand">
-            <div className="faktur-logo" aria-hidden>
-              SFF
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo_soka.png" alt="Soka Frozen Food" className="faktur-logo" />
             <div>
               <h1 className="faktur-title">FAKTUR PENJUALAN</h1>
               <p className="faktur-company">{APP_NAME}</p>
@@ -197,15 +196,9 @@ export function FakturPenjualanPrintLayout({ data }: Props) {
         }
 
         .faktur-logo {
-          width: 56px;
-          height: 56px;
-          border-radius: 999px;
-          border: 2px solid #111;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          font-size: 13px;
+          width: 64px;
+          height: 64px;
+          object-fit: contain;
           flex-shrink: 0;
         }
 
