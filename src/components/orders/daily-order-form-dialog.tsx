@@ -207,10 +207,12 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
     () =>
       lines.reduce((sum, l) => {
         const q = Number(l.qty);
-        const p = Number(l.unitPrice);
+        const masterPrice =
+          l.finishedProductId && hotelId ? hotelPriceMap.get(l.finishedProductId) : undefined;
+        const p = masterPrice != null && Number(masterPrice) > 0 ? Number(masterPrice) : Number(l.unitPrice);
         return sum + (Number.isFinite(q) && Number.isFinite(p) ? q * p : 0);
       }, 0),
-    [lines],
+    [lines, hotelPriceMap, hotelId],
   );
 
   // ---------------------------------------------------------------------------
@@ -253,15 +255,23 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
         status,
         lines: lines
           .filter((l) => l.finishedProductId && Number(l.qty) > 0)
-          .map((l, i) => ({
-            finishedProductId: l.finishedProductId,
-            deliverySlot: l.deliverySlot,
-            qty: Number(l.qty),
-            unitPrice: Number(l.unitPrice),
-            source: l.source,
-            notes: l.notes || undefined,
-            sortOrder: i,
-          })),
+          .map((l, i) => {
+            const masterPrice =
+              l.finishedProductId && hotelId ? hotelPriceMap.get(l.finishedProductId) : undefined;
+            const finalPrice =
+              masterPrice != null && Number(masterPrice) > 0
+                ? Number(masterPrice)
+                : Number(l.unitPrice);
+            return {
+              finishedProductId: l.finishedProductId,
+              deliverySlot: l.deliverySlot,
+              qty: Number(l.qty),
+              unitPrice: finalPrice,
+              source: l.source,
+              notes: l.notes || undefined,
+              sortOrder: i,
+            };
+          }),
       };
       if (isEdit && editData) {
         const { data } = await api.patch<{ data: { id: string } }>(
@@ -515,28 +525,48 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                       {/* Unit price */}
                       <div className="space-y-1.5">
                         <Label className="text-xs">Harga satuan (PO)</Label>
-                        <Input
-                          inputMode="decimal"
-                          min={0}
-                          step="any"
-                          value={line.unitPrice}
-                          onChange={(e) => updateLine(line.key, { unitPrice: e.target.value })}
-                        />
                         {(() => {
                           if (!line.finishedProductId || !hotelId) return null;
                           const mp = hotelPriceMap.get(line.finishedProductId);
-                          if (mp == null) return null;
-                          if (Number(mp) <= 0)
+                          if (mp != null && Number(mp) > 0) {
                             return (
-                              <p className="text-[11px] text-amber-600">
-                                Harga master belum diset untuk hotel ini.
-                              </p>
+                              <div className="flex h-9 items-center rounded-md border border-border bg-muted/60 px-3 text-sm font-semibold tabular-nums text-foreground">
+                                {formatIdr(mp)}
+                              </div>
                             );
-                          return (
-                            <p className="text-[11px] text-primary/70">
-                              Master: {formatIdr(mp)}
-                            </p>
-                          );
+                          }
+                          return null;
+                        })()}
+                        {(() => {
+                          if (!line.finishedProductId || !hotelId) {
+                            return (
+                              <Input
+                                inputMode="decimal"
+                                min={0}
+                                step="any"
+                                value={line.unitPrice}
+                                onChange={(e) => updateLine(line.key, { unitPrice: e.target.value })}
+                              />
+                            );
+                          }
+                          const mp = hotelPriceMap.get(line.finishedProductId);
+                          if (mp == null || Number(mp) <= 0) {
+                            return (
+                              <>
+                                <Input
+                                  inputMode="decimal"
+                                  min={0}
+                                  step="any"
+                                  value={line.unitPrice}
+                                  onChange={(e) => updateLine(line.key, { unitPrice: e.target.value })}
+                                />
+                                <p className="text-[11px] text-amber-600">
+                                  Harga master belum diset untuk hotel ini.
+                                </p>
+                              </>
+                            );
+                          }
+                          return null;
                         })()}
                       </div>
 
@@ -545,7 +575,16 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                         <div>
                           <span className="text-xs text-muted-foreground">Subtotal</span>
                           <p className="font-semibold tabular-nums">
-                            {formatIdr(Number(line.qty || 0) * Number(line.unitPrice || 0))}
+                            {formatIdr(
+                              Number(line.qty || 0) *
+                                Number(
+                                  (() => {
+                                    if (!line.finishedProductId || !hotelId) return line.unitPrice || 0;
+                                    const mp = hotelPriceMap.get(line.finishedProductId);
+                                    return mp != null && Number(mp) > 0 ? mp : line.unitPrice || 0;
+                                  })(),
+                                ),
+                            )}
                           </p>
                         </div>
                       </div>

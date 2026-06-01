@@ -105,7 +105,7 @@ type MainNavBrandProps = { className?: string };
 export function MainNavBrand({ className }: MainNavBrandProps) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <Image src={logoSoka} alt="Soka Frozen" width={40} height={40} className="shrink-0 object-contain" />
+      <Image src={logoSoka} alt="Soka Frozen" width={56} height={56} className="shrink-0 object-contain" />
       <div>
         <p className="text-sm font-semibold leading-tight text-sidebar-foreground">{APP_NAME}</p>
         <p className="text-xs text-sidebar-foreground/70">{APP_TAGLINE}</p>
