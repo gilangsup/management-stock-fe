@@ -72,8 +72,7 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
             (l, i) =>
               `<tr>
                 <td>${i + 1}</td>
-                <td>${escapeHtml(l.productName)}<br><small>${escapeHtml(l.itemCode)}</small></td>
-                <td>${escapeHtml(l.hotelName)}</td>
+                <td>${escapeHtml(l.productName)} - ${escapeHtml(l.itemCode)}</td>
                 <td class="text-right">${Number(l.qty).toLocaleString("id-ID")} ${escapeHtml(l.unitCode)}</td>
                 <td>${escapeHtml(l.notes ?? "—")}</td>
               </tr>`,
@@ -82,7 +81,7 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
         return `<div class="section">
           <h2>${escapeHtml(SLOT_LABELS[slot])}</h2>
           <table>
-            <thead><tr><th>#</th><th>Produk</th><th>Hotel</th><th class="text-right">Qty</th><th>Catatan</th></tr></thead>
+            <thead><tr><th>#</th><th>Produk</th><th class="text-right">Qty</th><th>Catatan</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>`;
@@ -92,7 +91,7 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
     printHtmlDocument(
       `Instruksi Dapur ${viewDate}`,
       `<h1>Instruksi Dapur</h1>
-       <p class="meta">Tanggal PO: ${escapeHtml(formatDate(viewDate))} · ${kitchenLines.length} item</p>
+       <p class="meta">Tanggal pengiriman: ${escapeHtml(formatDate(viewDate))} · ${kitchenLines.length} item</p>
        ${sections}`,
     );
   }, [bySlot, kitchenLines.length, viewDate]);
@@ -102,11 +101,11 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">
-            <p className="text-sm font-medium">Tanggal PO</p>
+            <p className="text-sm font-medium">Tanggal pengiriman</p>
             <DateField value={viewDate} onChange={onViewDateChange} />
           </div>
           <p className="pb-1 text-xs text-muted-foreground max-w-md">
-            Menampilkan semua pesanan <strong>confirmed</strong> pada tanggal PO tersebut —
+            Menampilkan semua pesanan <strong>confirmed</strong> pada tanggal pengiriman tersebut —
             item yang dibuat sendiri, dikelompokkan per jam pengiriman.
           </p>
         </div>
@@ -128,7 +127,7 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
           <p className="text-sm text-muted-foreground">
             Tidak ada instruksi dapur untuk <strong>{formatDate(viewDate)}</strong>.
             <br />
-            Pastikan ada pesanan confirmed pada tanggal PO ini.
+            Pastikan ada pesanan confirmed pada tanggal pengiriman ini.
           </p>
         </div>
       ) : (

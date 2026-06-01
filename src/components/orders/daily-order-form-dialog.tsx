@@ -109,8 +109,10 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
   const isEdit = Boolean(editData);
 
   const [hotelId, setHotelId] = useState(editData?.hotel.id ?? "");
-  const [orderDate, setOrderDate] = useState(editData?.orderDate ?? today);
-  const [deliveryDate, setDeliveryDate] = useState(editData?.deliveryDate ?? "");
+  // Tanggal pengiriman adalah tanggal utama; orderDate dikirim sama nilainya ke backend
+  const [deliveryDate, setDeliveryDate] = useState(
+    editData?.deliveryDate ?? editData?.orderDate ?? today,
+  );
   const [poNumber, setPoNumber] = useState(editData?.poNumber ?? "");
   const [notes, setNotes] = useState(editData?.notes ?? "");
   const [status, setStatus] = useState<OrderStatus>(editData?.status ?? "draft");
@@ -122,8 +124,7 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
   useEffect(() => {
     if (open && editData) {
       setHotelId(editData.hotel.id);
-      setOrderDate(editData.orderDate);
-      setDeliveryDate(editData.deliveryDate ?? "");
+      setDeliveryDate(editData.deliveryDate ?? editData.orderDate ?? today);
       setPoNumber(editData.poNumber ?? "");
       setNotes(editData.notes ?? "");
       setStatus(editData.status);
@@ -227,8 +228,7 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
 
   function resetForm() {
     setHotelId("");
-    setOrderDate(today);
-    setDeliveryDate("");
+    setDeliveryDate(today);
     setPoNumber("");
     setNotes("");
     setStatus("draft");
@@ -247,8 +247,8 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
   const save = useMutation({
     mutationFn: async () => {
       const body = {
-        orderDate,
-        deliveryDate: deliveryDate || undefined,
+        orderDate: deliveryDate,   // orderDate = deliveryDate; Tanggal PO dihapus dari UI
+        deliveryDate,
         hotelId,
         poNumber: poNumber || undefined,
         notes: notes || undefined,
@@ -295,7 +295,7 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
 
   const canSubmit =
     hotelId &&
-    orderDate &&
+    deliveryDate &&
     lines.some((l) => l.finishedProductId && Number(l.qty) > 0);
 
   // ---------------------------------------------------------------------------
@@ -334,13 +334,8 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
             </div>
 
             <div className="space-y-2">
-              <Label>Tanggal PO / pesanan <span className="text-destructive">*</span></Label>
-              <DateField value={orderDate} onChange={setOrderDate} />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Tanggal pengiriman</Label>
-              <DateField value={deliveryDate} onChange={setDeliveryDate} placeholder="Opsional" />
+              <Label>Tanggal pengiriman <span className="text-destructive">*</span></Label>
+              <DateField value={deliveryDate} onChange={setDeliveryDate} />
             </div>
 
             <div className="space-y-2">
@@ -434,15 +429,7 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                         <Label className="text-xs">Produk</Label>
                         <Select
                           value={line.finishedProductId || undefined}
-                          onValueChange={(v) => {
-                            const productId = v ?? "";
-                            const hotelPrice = productId ? hotelPriceMap.get(productId) : undefined;
-                            const patch: Partial<DraftLine> = { finishedProductId: productId };
-                            if (hotelPrice != null && Number(hotelPrice) > 0) {
-                              patch.unitPrice = String(Number(hotelPrice));
-                            }
-                            updateLine(line.key, patch);
-                          }}
+                          onValueChange={(v) => updateLine(line.key, { finishedProductId: v ?? "" })}
                         >
                           <SelectTrigger className="w-full min-w-0">
                             <SelectValue placeholder="Pilih produk">
@@ -522,75 +509,8 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                         />
                       </div>
 
-                      {/* Unit price */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Harga satuan (PO)</Label>
-                        {(() => {
-                          if (!line.finishedProductId || !hotelId) return null;
-                          const mp = hotelPriceMap.get(line.finishedProductId);
-                          if (mp != null && Number(mp) > 0) {
-                            return (
-                              <div className="flex h-9 items-center rounded-md border border-border bg-muted/60 px-3 text-sm font-semibold tabular-nums text-foreground">
-                                {formatIdr(mp)}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
-                        {(() => {
-                          if (!line.finishedProductId || !hotelId) {
-                            return (
-                              <Input
-                                inputMode="decimal"
-                                min={0}
-                                step="any"
-                                value={line.unitPrice}
-                                onChange={(e) => updateLine(line.key, { unitPrice: e.target.value })}
-                              />
-                            );
-                          }
-                          const mp = hotelPriceMap.get(line.finishedProductId);
-                          if (mp == null || Number(mp) <= 0) {
-                            return (
-                              <>
-                                <Input
-                                  inputMode="decimal"
-                                  min={0}
-                                  step="any"
-                                  value={line.unitPrice}
-                                  onChange={(e) => updateLine(line.key, { unitPrice: e.target.value })}
-                                />
-                                <p className="text-[11px] text-amber-600">
-                                  Harga master belum diset untuk hotel ini.
-                                </p>
-                              </>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-
-                      {/* Subtotal */}
-                      <div className="flex items-end text-sm">
-                        <div>
-                          <span className="text-xs text-muted-foreground">Subtotal</span>
-                          <p className="font-semibold tabular-nums">
-                            {formatIdr(
-                              Number(line.qty || 0) *
-                                Number(
-                                  (() => {
-                                    if (!line.finishedProductId || !hotelId) return line.unitPrice || 0;
-                                    const mp = hotelPriceMap.get(line.finishedProductId);
-                                    return mp != null && Number(mp) > 0 ? mp : line.unitPrice || 0;
-                                  })(),
-                                ),
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
                       {/* Notes */}
-                      <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                      <div className="space-y-1.5 sm:col-span-2">
                         <Label className="text-xs">Catatan baris</Label>
                         <Input
                           placeholder="Opsional"
@@ -607,7 +527,7 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
 
           {/* ── Grand total ─────────────────────────────────────────────────── */}
           <div className="flex items-center justify-between border-t border-border pt-3 text-sm">
-            <span className="text-muted-foreground">Total PO (preview)</span>
+            <span className="text-muted-foreground">Total (preview dari harga master)</span>
             <span className="font-bold tabular-nums text-base">{formatIdr(grandTotal)}</span>
           </div>
         </div>

@@ -1,8 +1,9 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Eye, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Eye, FileDown, Loader2, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { DateField } from "@/components/forms/date-field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { escapeHtml, printHtmlDocument } from "@/lib/export-utils";
 import { formatDate } from "@/lib/format";
 import type { DailyOrderListItem } from "@/components/inventory/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
@@ -35,6 +37,11 @@ const FILTER_ALL = "__all__";
 const PAGE_SIZE = 20;
 
 type Hotel = { id: string; name: string };
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: "Draft",
+  confirmed: "Confirmed",
+};
 
 // ---------------------------------------------------------------------------
 // Props
@@ -91,6 +98,81 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
   const hasNext = rows.length === PAGE_SIZE;
   const hasPrev = page > 1;
 
+  // ── PDF export ────────────────────────────────────────────────────────────
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPdf = useCallback(async () => {
+    setPdfLoading(true);
+    try {
+      const params: Record<string, string | number> = { page: 1, limit: 1000 };
+      if (hotelFilter !== FILTER_ALL) params.hotelId = hotelFilter;
+      if (dateFrom) params.from = dateFrom;
+      if (dateTo) params.to = dateTo;
+      if (statusFilter !== FILTER_ALL) params.status = statusFilter;
+
+      const { data } = await api.get<{ data: DailyOrderListItem[]; meta?: { total: number } }>(
+        "/daily-orders",
+        { params },
+      );
+      const allRows = data.data ?? [];
+
+      const hotelName =
+        hotelFilter !== FILTER_ALL
+          ? (hotels.data?.find((h) => h.id === hotelFilter)?.name ?? hotelFilter)
+          : "Semua hotel";
+      const statusName =
+        statusFilter !== FILTER_ALL ? (STATUS_LABEL[statusFilter] ?? statusFilter) : "Semua status";
+
+      const filterLines = [
+        `Hotel: <strong>${escapeHtml(hotelName)}</strong>`,
+        `Tanggal pengiriman: <strong>${dateFrom ? escapeHtml(formatDate(dateFrom)) : "—"}</strong> s.d. <strong>${dateTo ? escapeHtml(formatDate(dateTo)) : "—"}</strong>`,
+        `Status: <strong>${escapeHtml(statusName)}</strong>`,
+        `Total: <strong>${allRows.length} pesanan</strong>`,
+      ].join(" &nbsp;·&nbsp; ");
+
+      const tableRows = allRows
+        .map(
+          (o, i) =>
+            `<tr>
+              <td class="text-right">${i + 1}</td>
+              <td>${escapeHtml(o.hotel.name)}</td>
+              <td>${o.deliveryDate ? escapeHtml(formatDate(o.deliveryDate)) : "—"}</td>
+              <td class="mono">${o.poNumber ? escapeHtml(o.poNumber) : "—"}</td>
+              <td class="text-right">${o.lineCount}</td>
+              <td>${escapeHtml(STATUS_LABEL[o.status] ?? o.status)}</td>
+            </tr>`,
+        )
+        .join("");
+
+      const body = `
+        <h1>Rekap Pesanan Harian</h1>
+        <p class="meta">${filterLines}</p>
+        ${
+          allRows.length === 0
+            ? `<p class="meta" style="margin-top:1rem">Tidak ada data pesanan pada filter ini.</p>`
+            : `<table>
+                <thead>
+                  <tr>
+                    <th class="text-right">#</th>
+                    <th>Hotel</th>
+                    <th>Tgl Pengiriman</th>
+                    <th>No. PO</th>
+                    <th class="text-right">Item</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>${tableRows}</tbody>
+              </table>`
+        }`;
+
+      printHtmlDocument("Rekap Pesanan Harian", body);
+    } catch {
+      toast.error("Gagal mengunduh PDF rekap pesanan");
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [hotelFilter, dateFrom, dateTo, statusFilter, hotels.data]);
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -114,12 +196,12 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium">Tanggal PO dari</p>
+          <p className="text-sm font-medium">Tanggal pengiriman dari</p>
           <DateField value={dateFrom} onChange={(v) => { setDateFrom(v); setPage(1); }} />
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium">Tanggal PO sampai</p>
+          <p className="text-sm font-medium">Tanggal pengiriman sampai</p>
           <DateField value={dateTo} onChange={(v) => { setDateTo(v); setPage(1); }} />
         </div>
 
@@ -141,15 +223,32 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
         </div>
       </div>
 
+      {/* Actions */}
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pdfLoading}
+          onClick={handleDownloadPdf}
+        >
+          {pdfLoading ? (
+            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+          ) : (
+            <FileDown className="mr-1.5 size-3.5" />
+          )}
+          Unduh PDF
+        </Button>
+      </div>
+
       {/* Table */}
       <div className="surface-table-wrap">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Tanggal PO</TableHead>
+              <TableHead>Tgl Pengiriman</TableHead>
               <TableHead>Hotel</TableHead>
               <TableHead>No. PO</TableHead>
-              <TableHead>Tgl Kirim</TableHead>
               <TableHead className="text-center">Item</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[180px]" />
@@ -158,36 +257,35 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
           <TableBody>
             {listQuery.isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                   Memuat…
                 </TableCell>
               </TableRow>
             ) : listQuery.isError ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-destructive text-sm">
+                <TableCell colSpan={6} className="h-24 text-center text-destructive text-sm">
                   Gagal memuat data pesanan.
                 </TableCell>
               </TableRow>
             ) : !rows.length ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   Belum ada pesanan pada rentang ini.
                 </TableCell>
               </TableRow>
             ) : (
               rows.map((order) => (
                 <TableRow key={order.id}>
-                  <TableCell className="font-medium">{formatDate(order.orderDate)}</TableCell>
-                  <TableCell>{order.hotel.name}</TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {order.poNumber ?? <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                  <TableCell>
+                  <TableCell className="font-medium">
                     {order.deliveryDate ? (
                       formatDate(order.deliveryDate)
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </TableCell>
+                  <TableCell>{order.hotel.name}</TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {order.poNumber ?? <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-center">
                     <Badge variant="secondary">{order.lineCount}</Badge>
