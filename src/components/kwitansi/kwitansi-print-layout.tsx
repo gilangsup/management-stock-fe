@@ -42,11 +42,18 @@ export function KwitansiPrintLayout({ data }: Props) {
             <span className="kwitansi-value kwitansi-shade kwitansi-italic">{amountWords}</span>
           </div>
 
-          <div className="kwitansi-row">
+          <div className="kwitansi-row kwitansi-row-untuk-pembayaran">
             <span className="kwitansi-label">UNTUK PEMBAYARAN</span>
             <span className="kwitansi-colon">:</span>
-            <span className="kwitansi-value kwitansi-underline">
-              {data.untukPembayaran || "\u00A0"}
+            <span className="kwitansi-value kwitansi-underline kwitansi-multiline">
+              {data.untukPembayaran
+                ? data.untukPembayaran.split("\n").map((line, i, arr) => (
+                    <span key={i}>
+                      {line || "\u00A0"}
+                      {i < arr.length - 1 && <br />}
+                    </span>
+                  ))
+                : "\u00A0"}
             </span>
           </div>
 
@@ -190,6 +197,15 @@ export function KwitansiPrintLayout({ data }: Props) {
           letter-spacing: 0.04em;
           line-height: 1.4;
           font-size: 12px;
+        }
+
+        .kwitansi-multiline {
+          white-space: pre-line;
+          line-height: 1.5;
+        }
+
+        .kwitansi-row-untuk-pembayaran {
+          align-items: flex-start;
         }
 
         .kwitansi-footer {

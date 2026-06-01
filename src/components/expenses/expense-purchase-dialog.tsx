@@ -28,11 +28,10 @@ type LineDraft = {
   qty: string;
   /** costPrice dari master bahan baku yang dipilih; dipakai untuk preview total. */
   masterCostPrice: string;
-  /**
-   * Harga yang diisi manual oleh user — hanya dipakai dan ditampilkan saat
-   * masterCostPrice tidak tersedia (0 atau kosong).
-   */
+  /** Harga per satuan — pre-fill dari master, bisa diubah user. */
   unitPrice: string;
+  /** Override total baris manual (opsional) — jika diisi, menggantikan qty × unitPrice. */
+  totalPrice: string;
   /** Override catatan global untuk baris ini (opsional). */
   lineNotes: string;
 };
@@ -44,6 +43,7 @@ function newLine(): LineDraft {
     qty: "1",
     masterCostPrice: "",
     unitPrice: "",
+    totalPrice: "",
     lineNotes: "",
   };
 }
@@ -75,6 +75,11 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
   const grandPreview = useMemo(() => {
     let sum = 0;
     for (const line of lines) {
+      const tp = Number(line.totalPrice.trim());
+      if (Number.isFinite(tp) && tp > 0) {
+        sum += tp;
+        continue;
+      }
       const q = Number(line.qty.trim());
       const cp = Number(line.unitPrice.trim());
       if (Number.isFinite(q) && q > 0 && Number.isFinite(cp) && cp > 0) {
@@ -113,6 +118,9 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
         // Kirim unitPrice jika user sudah isi (pre-fill dari master atau input manual)
         const cp = Number(line.unitPrice.trim());
         if (Number.isFinite(cp) && cp > 0) row.unitPrice = cp;
+        // Kirim totalPrice jika user isi manual (override qty × unitPrice)
+        const tp = Number(line.totalPrice.trim());
+        if (Number.isFinite(tp) && tp > 0) row.totalPrice = tp;
         const ln = line.lineNotes.trim();
         if (ln) row.notes = ln;
 
@@ -277,7 +285,7 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Kuantitas</Label>
                       <Input
@@ -293,7 +301,9 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Harga satuan (Rp)</Label>
+                      <Label className="text-xs">
+                        Harga beli / satuan (Rp)
+                      </Label>
                       <Input
                         inputMode="decimal"
                         min={0}
@@ -319,6 +329,33 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
                       ) : line.rawMaterialId ? (
                         <p className="text-[11px] text-amber-600">Harga master belum diset.</p>
                       ) : null}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        Total baris{" "}
+                        <span className="font-normal text-muted-foreground">(opsional)</span>
+                      </Label>
+                      <Input
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        placeholder={
+                          line.qty && line.unitPrice
+                            ? String(Number(line.qty) * Number(line.unitPrice))
+                            : "qty × harga"
+                        }
+                        value={line.totalPrice}
+                        onChange={(e) =>
+                          setLines((prev) =>
+                            prev.map((l) =>
+                              l.key === line.key ? { ...l, totalPrice: e.target.value } : l,
+                            ),
+                          )
+                        }
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        Isi jika total berbeda dari qty × harga.
+                      </p>
                     </div>
                   </div>
 
