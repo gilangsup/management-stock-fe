@@ -43,6 +43,13 @@ const STATUS_LABEL: Record<string, string> = {
   confirmed: "Confirmed",
 };
 
+function formatOrderNotes(order: DailyOrderListItem): string {
+  const parts: string[] = [];
+  if (order.lineNotesSummary?.trim()) parts.push(order.lineNotesSummary.trim());
+  if (order.notes?.trim()) parts.push(order.notes.trim());
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -107,8 +114,10 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
     hotelCode: string;
     deliverySlot: string;
     productName: string;
+    itemCode: string;
     unitCode: string;
     totalQty: number;
+    notes: string;
   };
 
   /** Label pendek untuk header slot di PDF (sesuai gambar: "CB 1", "CB 2", …) */
@@ -140,21 +149,54 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
         return;
       }
 
-      // Kelompokkan per hotel → per slot
-      type SlotGroup = { products: RekapSummaryLine[] };
-      type HotelGroup = { hotelName: string; slots: Map<string, SlotGroup> };
+      // Kelompokkan per CB → produk → qty & catatan per hotel (dipisah "/")
+      type HotelEntry = { hotelCode: string; qty: number; notes: string };
+      type ProductGroup = {
+        productName: string;
+        unitCode: string;
+        byHotel: HotelEntry[];
+      };
 
-      const hotelMap = new Map<string, HotelGroup>();
+      const slotMap = new Map<string, Map<string, ProductGroup>>();
       for (const line of lines) {
-        if (!hotelMap.has(line.hotelId)) {
-          hotelMap.set(line.hotelId, { hotelName: line.hotelName, slots: new Map() });
+        if (!slotMap.has(line.deliverySlot)) {
+          slotMap.set(line.deliverySlot, new Map());
         }
-        const hotel = hotelMap.get(line.hotelId)!;
-        if (!hotel.slots.has(line.deliverySlot)) {
-          hotel.slots.set(line.deliverySlot, { products: [] });
+        const products = slotMap.get(line.deliverySlot)!;
+        const productKey = `${line.itemCode}\0${line.unitCode}`;
+        if (!products.has(productKey)) {
+          products.set(productKey, {
+            productName: line.productName,
+            unitCode: line.unitCode,
+            byHotel: [],
+          });
         }
-        hotel.slots.get(line.deliverySlot)!.products.push(line);
+        products.get(productKey)!.byHotel.push({
+          hotelCode: line.hotelCode,
+          qty: line.totalQty,
+          notes: line.notes?.trim() || "-",
+        });
       }
+
+      const formatQtyPart = (qty: number) =>
+        Number.isInteger(qty)
+          ? qty.toLocaleString("id-ID")
+          : qty.toLocaleString("id-ID", { maximumFractionDigits: 4 });
+
+      const sortedHotelEntries = (entries: HotelEntry[]) =>
+        [...entries].sort((a, b) => a.hotelCode.localeCompare(b.hotelCode));
+
+      const formatQtyCell = (group: ProductGroup) => {
+        const parts = sortedHotelEntries(group.byHotel).map((h) => formatQtyPart(h.qty));
+        const joined = parts.join("/");
+        return group.unitCode ? `${joined} ${group.unitCode}` : joined;
+      };
+
+      const formatNotesCell = (group: ProductGroup) => {
+        const parts = sortedHotelEntries(group.byHotel).map((h) => h.notes || "-");
+        if (parts.every((p) => p === "-")) return "-";
+        return parts.join(" / ");
+      };
 
       // Info filter untuk header PDF
       const filterMeta = [
@@ -171,59 +213,67 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
         .filter(Boolean)
         .join(" · ");
 
-      // Bangun blok HTML per hotel
-      const hotelBlocks = Array.from(hotelMap.values())
-        .map((hotel) => {
-          const slotBlocks = SLOT_ORDER.filter((s) => hotel.slots.has(s))
-            .map((slot) => {
-              const { products } = hotel.slots.get(slot)!;
-              const rows = products
-                .map(
-                  (p, i) =>
-                    `<tr>
-                      <td class="col-no text-right">${i + 1}</td>
-                      <td>${escapeHtml(p.productName)}</td>
-                      <td class="col-qty text-right">${Number(p.totalQty).toLocaleString("id-ID")} ${escapeHtml(p.unitCode)}</td>
-                    </tr>`,
-                )
-                .join("");
-              return `<div class="slot-section">
-                <p class="slot-header">${escapeHtml(SLOT_SHORT[slot] ?? slot)}</p>
-                <table>
-                  <thead>
-                    <tr>
-                      <th class="col-no text-right">NO</th>
-                      <th>PRODUK</th>
-                      <th class="col-qty text-right">QTY</th>
-                    </tr>
-                  </thead>
-                  <tbody>${rows}</tbody>
-                </table>
-              </div>`;
-            })
+      // Bangun blok HTML per CB (semua hotel digabung)
+      const cbBlocks = SLOT_ORDER.filter((slot) => slotMap.has(slot))
+        .map((slot) => {
+          const products = Array.from(slotMap.get(slot)!.values()).sort((a, b) =>
+            a.productName.localeCompare(b.productName, "id"),
+          );
+
+          const tableRows = products
+            .map(
+              (p, i) =>
+                `<tr>
+                  <td class="col-no text-right">${i + 1}</td>
+                  <td>${escapeHtml(p.productName)}</td>
+                  <td class="col-qty text-right">${escapeHtml(formatQtyCell(p))}</td>
+                  <td class="col-notes">${escapeHtml(formatNotesCell(p))}</td>
+                </tr>`,
+            )
             .join("");
 
-          return `<div class="hotel-block">
-            <p class="hotel-header">HOTEL : ${escapeHtml(hotel.hotelName)}</p>
-            ${slotBlocks}
+          return `<div class="cb-block">
+            <p class="cb-header">${escapeHtml(SLOT_SHORT[slot] ?? slot)}</p>
+            <table>
+              <thead>
+                <tr>
+                  <th class="col-no text-right">NO</th>
+                  <th>PRODUK</th>
+                  <th class="col-qty text-right">QTY</th>
+                  <th class="col-notes">CATATAN</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
           </div>`;
         })
         .join("");
 
       const extraCss = `
-        .hotel-block { margin-bottom: 28px; page-break-inside: avoid; }
-        .hotel-header {
+        .cb-block { margin-bottom: 28px; page-break-inside: avoid; }
+        .cb-header {
           font-size: 15px; font-weight: 800; text-transform: uppercase;
           margin: 0 0 10px; padding-bottom: 6px;
           border-bottom: 2.5px solid #111; letter-spacing: 0.03em;
-        }
-        .slot-section { margin-top: 10px; }
-        .slot-header {
-          font-size: 14px; font-weight: 700; color: #bb0000;
-          margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.05em;
+          color: #bb0000;
         }
         .col-no { width: 36px; }
-        .col-qty { width: 72px; }
+        .col-qty {
+          width: 100px;
+          max-width: 140px;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+          font-size: 11px;
+          line-height: 1.35;
+        }
+        .col-notes {
+          width: 140px;
+          max-width: 200px;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+          font-size: 11px;
+          line-height: 1.35;
+        }
         table { margin-top: 0; }
         th { text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
       `;
@@ -232,7 +282,7 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
         <style>${extraCss}</style>
         <h1>Rekap Pesanan Harian</h1>
         <p class="meta">${filterMeta}</p>
-        ${hotelBlocks}
+        ${cbBlocks}
       `;
 
       printHtmlDocument("Rekap Pesanan Harian", body);
@@ -322,6 +372,7 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
               <TableHead>No. PO</TableHead>
               <TableHead>Tgl Kirim</TableHead>
               <TableHead className="text-center">Item</TableHead>
+              <TableHead className="min-w-[140px]">Catatan</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-[180px]" />
             </TableRow>
@@ -329,19 +380,19 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
           <TableBody>
             {listQuery.isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                   Memuat…
                 </TableCell>
               </TableRow>
             ) : listQuery.isError ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-destructive text-sm">
+                <TableCell colSpan={8} className="h-24 text-center text-destructive text-sm">
                   Gagal memuat data pesanan.
                 </TableCell>
               </TableRow>
             ) : !rows.length ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-28 text-center text-muted-foreground">
                   Belum ada pesanan pada rentang ini.
                 </TableCell>
               </TableRow>
@@ -362,6 +413,11 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
                   </TableCell>
                   <TableCell className="text-center">
                     <Badge variant="secondary">{order.lineCount}</Badge>
+                  </TableCell>
+                  <TableCell className="max-w-[220px] text-sm text-muted-foreground">
+                    <span className="line-clamp-2" title={formatOrderNotes(order)}>
+                      {formatOrderNotes(order)}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <OrderStatusBadge status={order.status} />

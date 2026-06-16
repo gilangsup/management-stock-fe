@@ -2,12 +2,13 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isAxiosError } from "axios";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -40,12 +41,47 @@ function newLine(): LineDraft {
   return {
     key: crypto.randomUUID(),
     rawMaterialId: "",
-    qty: "1",
+    qty: "0",
     masterCostPrice: "",
     unitPrice: "",
     totalPrice: "",
     lineNotes: "",
   };
+}
+
+type FormSnapshot = {
+  expenseDate: string;
+  notes: string;
+  lines: LineDraft[];
+};
+
+function normalizeLine(line: LineDraft) {
+  return {
+    rawMaterialId: line.rawMaterialId.trim(),
+    qty: line.qty.trim(),
+    unitPrice: line.unitPrice.trim(),
+    totalPrice: line.totalPrice.trim(),
+    lineNotes: line.lineNotes.trim(),
+  };
+}
+
+function linesEqual(a: LineDraft[], b: LineDraft[]) {
+  if (a.length !== b.length) return false;
+  return a.every((line, i) => {
+    const left = normalizeLine(line);
+    const right = normalizeLine(b[i]!);
+    return (
+      left.rawMaterialId === right.rawMaterialId &&
+      left.qty === right.qty &&
+      left.unitPrice === right.unitPrice &&
+      left.totalPrice === right.totalPrice &&
+      left.lineNotes === right.lineNotes
+    );
+  });
+}
+
+function snapshotLines(lines: LineDraft[]): LineDraft[] {
+  return lines.map((line) => ({ ...line }));
 }
 
 type Props = {
@@ -60,17 +96,69 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
   const [expenseDate, setExpenseDate] = useState(anchorDate);
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>(() => [newLine()]);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   /** Supaya reset hanya saat dialog baru dibuka (bukan saat anchorDate berubah saat sudah terbuka). */
   const wasOpenRef = useRef(false);
+  const initialFormRef = useRef<FormSnapshot | null>(null);
+
+  const resetForm = useCallback(
+    (date = anchorDate) => {
+      const initialLines = [newLine()];
+      setExpenseDate(date);
+      setNotes("");
+      setLines(initialLines);
+      initialFormRef.current = {
+        expenseDate: date,
+        notes: "",
+        lines: snapshotLines(initialLines),
+      };
+    },
+    [anchorDate],
+  );
 
   useEffect(() => {
     if (open && !wasOpenRef.current) {
-      setExpenseDate(anchorDate);
-      setNotes("");
-      setLines([newLine()]);
+      resetForm(anchorDate);
     }
     wasOpenRef.current = open;
-  }, [open, anchorDate]);
+  }, [open, anchorDate, resetForm]);
+
+  const isDirty = useMemo(() => {
+    const initial = initialFormRef.current;
+    if (!initial || !open) return false;
+    if (expenseDate !== initial.expenseDate) return true;
+    if (notes.trim() !== initial.notes.trim()) return true;
+    return !linesEqual(lines, initial.lines);
+  }, [open, expenseDate, notes, lines]);
+
+  const closeWithoutConfirm = useCallback(() => {
+    setConfirmDiscardOpen(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const requestClose = useCallback(() => {
+    if (isDirty) {
+      setConfirmDiscardOpen(true);
+      return;
+    }
+    closeWithoutConfirm();
+  }, [closeWithoutConfirm, isDirty]);
+
+  const confirmDiscard = useCallback(() => {
+    resetForm(anchorDate);
+    closeWithoutConfirm();
+  }, [anchorDate, closeWithoutConfirm, resetForm]);
+
+  const handleDialogOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) {
+        onOpenChange(true);
+        return;
+      }
+      requestClose();
+    },
+    [onOpenChange, requestClose],
+  );
 
   const grandPreview = useMemo(() => {
     let sum = 0;
@@ -148,10 +236,8 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
       } else {
         toast.success("Pembelian tercatat");
       }
-      setExpenseDate(anchorDate);
-      setNotes("");
-      setLines([newLine()]);
-      onOpenChange(false);
+      resetForm(anchorDate);
+      closeWithoutConfirm();
       qc.invalidateQueries({ queryKey: ["expenses"] });
       qc.invalidateQueries({ queryKey: ["expenses-summary"] });
       qc.invalidateQueries({ queryKey: ["expense-summary-dash"] });
@@ -202,8 +288,9 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
   }, [lines]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(90vh,800px)] flex-col gap-0 overflow-hidden sm:max-w-2xl">
+    <>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="flex max-h-[min(90vh,800px)] flex-col gap-0 overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Tambah pembelian</DialogTitle>
           <p className="text-sm text-muted-foreground">
@@ -397,7 +484,7 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
         </div>
 
         <DialogFooter className="gap-2 sm:justify-end">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" onClick={requestClose}>
             Batal
           </Button>
           <Button
@@ -411,5 +498,27 @@ export function ExpensePurchaseDialog({ open, onOpenChange, anchorDate }: Props)
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+      <Dialog open={confirmDiscardOpen} onOpenChange={setConfirmDiscardOpen}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Keluar dari form?</DialogTitle>
+            <DialogDescription>
+              Data yang telah Anda isi belum disimpan.
+              <br />
+              Apakah Anda yakin ingin keluar?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button type="button" variant="ghost" onClick={() => setConfirmDiscardOpen(false)}>
+              Tetap di Form
+            </Button>
+            <Button type="button" variant="destructive" onClick={confirmDiscard}>
+              Keluar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -120,6 +120,7 @@ export type DailyOrderListItem = {
   hotel: { id: string; code: string; name: string };
   poNumber: string | null;
   notes: string | null;
+  lineNotesSummary: string | null;
   status: OrderStatus;
   lineCount: number;
   createdAt: string;
