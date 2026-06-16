@@ -12,6 +12,7 @@ import { ChevronDownIcon, CheckIcon, ChevronUpIcon, Search } from "lucide-react"
 type SelectSearchFilterContextValue = {
   debouncedQuery: string
   searchable: boolean
+  listId: string
 }
 
 const SelectSearchFilterContext =
@@ -136,6 +137,14 @@ function SelectSearchInput({
     [],
   )
 
+  const focusFirstVisibleItem = React.useCallback(() => {
+    const list = document.getElementById(listId)
+    const firstItem = list?.querySelector<HTMLElement>(
+      '[data-slot="select-item"]:not([data-search-hidden])',
+    )
+    firstItem?.focus()
+  }, [listId])
+
   const handleKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       e.stopPropagation()
@@ -145,19 +154,15 @@ function SelectSearchInput({
       }
       if (e.key === "ArrowDown" || e.key === "Enter") {
         e.preventDefault()
-        const list = document.getElementById(listId)
-        const firstItem = list?.querySelector<HTMLElement>(
-          '[data-slot="select-item"]:not([hidden])',
-        )
-        firstItem?.focus()
+        focusFirstVisibleItem()
       }
     },
-    [clearSearch, listId],
+    [clearSearch, focusFirstVisibleItem],
   )
 
   return (
     <div
-      className="sticky top-0 z-20 border-b border-border bg-popover p-1.5"
+      className="shrink-0 border-b border-border bg-popover p-1.5"
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="relative">
@@ -174,6 +179,32 @@ function SelectSearchInput({
         />
       </div>
     </div>
+  )
+}
+
+function SelectSearchEmptyState() {
+  const ctx = useSelectSearchFilterContext()
+  const [showEmpty, setShowEmpty] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    const q = ctx?.debouncedQuery.trim() ?? ""
+    if (!ctx?.searchable || !q) {
+      setShowEmpty(false)
+      return
+    }
+    const list = document.getElementById(ctx.listId)
+    const visibleCount =
+      list?.querySelectorAll('[data-slot="select-item"]:not([data-search-hidden])')
+        .length ?? 0
+    setShowEmpty(visibleCount === 0)
+  }, [ctx?.debouncedQuery, ctx?.listId, ctx?.searchable])
+
+  if (!showEmpty) return null
+
+  return (
+    <p className="px-2.5 py-2 text-center text-xs text-muted-foreground">
+      Tidak ada hasil untuk &ldquo;{ctx?.debouncedQuery.trim()}&rdquo;
+    </p>
   )
 }
 
@@ -221,9 +252,13 @@ function SelectContent({
     () => ({
       debouncedQuery,
       searchable,
+      listId,
     }),
-    [debouncedQuery, searchable],
+    [debouncedQuery, searchable, listId],
   )
+
+  // alignItemWithTrigger + filter yang unmount item merusak posisi popup Base UI.
+  const resolvedAlignItemWithTrigger = searchable ? false : alignItemWithTrigger
 
   return (
     <SelectSearchFilterContext.Provider value={filterContext}>
@@ -234,14 +269,14 @@ function SelectContent({
             sideOffset={sideOffset}
             align={align}
             alignOffset={alignOffset}
-            alignItemWithTrigger={alignItemWithTrigger}
+            alignItemWithTrigger={resolvedAlignItemWithTrigger}
             className="isolate z-50"
           >
             <SelectPrimitive.Popup
               data-slot="select-content"
-              data-align-trigger={alignItemWithTrigger}
+              data-align-trigger={resolvedAlignItemWithTrigger}
               className={cn(
-                "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+                "relative isolate z-50 flex max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) flex-col overflow-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
                 className,
               )}
               {...props}
@@ -254,7 +289,13 @@ function SelectContent({
                 />
               ) : null}
               <SelectScrollUpButton />
-              <SelectPrimitive.List id={listId}>{children}</SelectPrimitive.List>
+              <SelectPrimitive.List
+                id={listId}
+                className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-1"
+              >
+                {children}
+              </SelectPrimitive.List>
+              <SelectSearchEmptyState />
               <SelectScrollDownButton />
             </SelectPrimitive.Popup>
           </SelectPrimitive.Positioner>
@@ -293,20 +334,19 @@ const SelectItem = React.memo(function SelectItem({
     [searchLabel, children],
   )
 
-  if (
-    searchCtx?.searchable &&
-    value != null &&
-    !matchesSearchQuery(label, searchCtx.debouncedQuery)
-  ) {
-    return null
-  }
+  const isVisible =
+    !searchCtx?.searchable ||
+    value == null ||
+    matchesSearchQuery(label, searchCtx.debouncedQuery)
 
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
+      data-search-hidden={isVisible ? undefined : ""}
       value={value}
       className={cn(
         "relative flex w-full cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        !isVisible && "hidden",
         className
       )}
       {...props}
