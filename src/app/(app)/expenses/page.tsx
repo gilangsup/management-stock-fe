@@ -14,6 +14,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatCard } from "@/components/ui/stat-card";
 import { ExpensePurchaseDialog } from "@/components/expenses/expense-purchase-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -39,6 +47,8 @@ import { formatDate, formatDecimalQty, formatIdr } from "@/lib/format";
 
 type Range = "today" | "week" | "month" | "custom";
 
+type SourceFilter = "all" | "manual" | "vendor_order";
+
 type ExpenseRow = {
   id: string;
   expenseDate: string;
@@ -46,14 +56,41 @@ type ExpenseRow = {
   unitPrice: string;
   totalPrice: string;
   notes?: string | null;
+  sourceType: "manual" | "vendor_order";
+  dailyOrderId?: string | null;
+  isReadOnly?: boolean;
   rawMaterial: {
     id: string;
     name: string;
     itemCode: string | null;
     costPrice?: string;
     unit: { id: string; code: string; name: string };
-  };
+  } | null;
+  finishedProduct?: {
+    id: string;
+    name: string;
+    itemCode: string;
+    unit: { code: string; name: string };
+  } | null;
 };
+
+function expenseItemLabel(row: ExpenseRow): { name: string; meta: string } {
+  if (row.finishedProduct) {
+    const fp = row.finishedProduct;
+    return {
+      name: fp.name,
+      meta: `${fp.itemCode} · ${fp.unit.name}`,
+    };
+  }
+  if (row.rawMaterial) {
+    const rm = row.rawMaterial;
+    return {
+      name: rm.name,
+      meta: `${rm.itemCode ?? "—"} · ${rm.unit.name}`,
+    };
+  }
+  return { name: "—", meta: "—" };
+}
 
 export default function ExpensesPage() {
   const qc = useQueryClient();
@@ -63,6 +100,7 @@ export default function ExpensesPage() {
   const [date, setDate] = useState(anchor);
   const [customFrom, setCustomFrom] = useState(anchor);
   const [customTo, setCustomTo] = useState(anchor);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<ExpenseRow | null>(null);
   const [expenseToEdit, setExpenseToEdit] = useState<ExpenseRow | null>(null);
@@ -80,12 +118,13 @@ export default function ExpensesPage() {
   const isCustom = range === "custom";
 
   // Params yang dikirim ke API
-  const apiParams = isCustom
-    ? { from: customFrom, to: customTo }
-    : { range, date };
+  const apiParams = {
+    ...(isCustom ? { from: customFrom, to: customTo } : { range, date }),
+    ...(sourceFilter !== "all" ? { sourceFilter } : {}),
+  };
 
   const summary = useQuery({
-    queryKey: ["expenses-summary", range, date, customFrom, customTo],
+    queryKey: ["expenses-summary", range, date, customFrom, customTo, sourceFilter],
     queryFn: async () => {
       const { data } = await api.get<{
         data: {
@@ -106,7 +145,7 @@ export default function ExpensesPage() {
   });
 
   const list = useQuery({
-    queryKey: ["expenses", range, date, customFrom, customTo],
+    queryKey: ["expenses", range, date, customFrom, customTo, sourceFilter],
     queryFn: async () => {
       const { data } = await api.get<{
         data: ExpenseRow[];
@@ -123,20 +162,20 @@ export default function ExpensesPage() {
     const d = expenseToEdit.expenseDate.slice(0, 10);
     setEditForm({
       expenseDate: d,
-      rawMaterialId: expenseToEdit.rawMaterial.id,
+      rawMaterialId: expenseToEdit.rawMaterial?.id ?? "",
       qty: String(expenseToEdit.qty),
       unitPrice: String(Number(expenseToEdit.unitPrice)),
       totalPrice: String(expenseToEdit.totalPrice),
       notes: expenseToEdit.notes ?? "",
     });
-    setEditMasterCostPrice(expenseToEdit.rawMaterial.costPrice ?? "");
+    setEditMasterCostPrice(expenseToEdit.rawMaterial?.costPrice ?? "");
   }, [expenseToEdit]);
 
   function buildExpensePatchBody(original: ExpenseRow): Record<string, unknown> | null {
     const body: Record<string, unknown> = {};
     const origDate = original.expenseDate.slice(0, 10);
     if (editForm.expenseDate !== origDate) body.expenseDate = editForm.expenseDate;
-    if (editForm.rawMaterialId !== original.rawMaterial.id) {
+    if (editForm.rawMaterialId !== (original.rawMaterial?.id ?? "")) {
       body.rawMaterialId = editForm.rawMaterialId;
     }
 
@@ -228,6 +267,7 @@ export default function ExpensesPage() {
 
   const canSubmitEdit =
     expenseToEdit &&
+    !expenseToEdit.isReadOnly &&
     editForm.rawMaterialId &&
     editForm.expenseDate &&
     Number(editForm.qty) > 0 &&
@@ -239,7 +279,7 @@ export default function ExpensesPage() {
       <div className={pageStackWide}>
         <PageHeader
           title="Belanja harian"
-          description="Catat pembelian bahan baku (qty, harga per satuan, total). Ringkasan harian, mingguan, bulanan, dan kustom."
+          description="Catat pembelian bahan baku dan lihat beli vendor dari pesanan harian. Ringkasan harian, mingguan, bulanan, dan kustom."
         >
           {!isCustom && <DateField value={date} onChange={setDate} />}
           <Button
@@ -296,6 +336,24 @@ export default function ExpensesPage() {
                 Kustom
               </TabsTrigger>
             </TabsList>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="expense-source-filter" className="shrink-0 text-sm text-muted-foreground">
+                Sumber
+              </Label>
+              <Select
+                value={sourceFilter}
+                onValueChange={(v) => setSourceFilter(v as SourceFilter)}
+              >
+                <SelectTrigger id="expense-source-filter" className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="vendor_order">Vendor Order</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Panel pilih rentang kustom */}
@@ -374,7 +432,8 @@ export default function ExpensesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Tanggal</TableHead>
-                <TableHead>Bahan baku</TableHead>
+                <TableHead>Item</TableHead>
+                <TableHead>Sumber</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Harga / satuan</TableHead>
                 <TableHead className="text-right">Total</TableHead>
@@ -383,19 +442,32 @@ export default function ExpensesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(list.data?.data ?? []).map((row) => (
+              {(list.data?.data ?? []).map((row) => {
+                const item = expenseItemLabel(row);
+                const isVendor = row.sourceType === "vendor_order" || row.isReadOnly;
+                return (
                 <TableRow key={row.id}>
                   <TableCell className="whitespace-nowrap text-sm">
                     {formatDate(row.expenseDate)}
                   </TableCell>
                   <TableCell>
                     <span className="font-semibold text-slate-800 dark:text-slate-100">
-                      {row.rawMaterial.name}
+                      {item.name}
                     </span>
                     <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
-                      {row.rawMaterial.itemCode ?? "—"} ·{" "}
-                      {row.rawMaterial.unit.name}
+                      {item.meta}
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    {isVendor ? (
+                      <Badge variant="secondary" className="font-normal">
+                        Vendor Order
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="font-normal">
+                        Manual
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">{formatDecimalQty(row.qty)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatIdr(row.unitPrice)}</TableCell>
@@ -410,6 +482,7 @@ export default function ExpensesPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
+                    {!isVendor ? (
                     <div className="flex justify-end gap-1">
                       <Button
                         type="button"
@@ -433,12 +506,16 @@ export default function ExpensesPage() {
                         </Button>
                       ) : null}
                     </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Pesanan harian</span>
+                    )}
                   </TableCell>
                 </TableRow>
-              ))}
+              );
+              })}
               {!list.data?.data?.length && (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                     Belum ada pembelian di periode ini.
                   </TableCell>
                 </TableRow>
@@ -575,7 +652,7 @@ export default function ExpensesPage() {
             <p className="text-sm text-muted-foreground">
               {expenseToDelete ? (
                 <>
-                  {formatDate(expenseToDelete.expenseDate)} · {expenseToDelete.rawMaterial.name} ·{" "}
+                  {formatDate(expenseToDelete.expenseDate)} · {expenseItemLabel(expenseToDelete).name} ·{" "}
                   {formatIdr(expenseToDelete.totalPrice)} akan dihapus permanen.
                 </>
               ) : null}

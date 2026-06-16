@@ -288,7 +288,7 @@ function SelectContent({
                   onDebouncedQueryChange={handleDebouncedQueryChange}
                 />
               ) : null}
-              <SelectScrollUpButton />
+              {!searchable ? <SelectScrollUpButton /> : null}
               <SelectPrimitive.List
                 id={listId}
                 className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-1"
@@ -296,7 +296,7 @@ function SelectContent({
                 {children}
               </SelectPrimitive.List>
               <SelectSearchEmptyState />
-              <SelectScrollDownButton />
+              {!searchable ? <SelectScrollDownButton /> : null}
             </SelectPrimitive.Popup>
           </SelectPrimitive.Positioner>
         </SelectPrimitive.Portal>
