@@ -44,10 +44,8 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function formatOrderNotes(order: DailyOrderListItem): string {
-  const parts: string[] = [];
-  if (order.lineNotesSummary?.trim()) parts.push(order.lineNotesSummary.trim());
-  if (order.notes?.trim()) parts.push(order.notes.trim());
-  return parts.length > 0 ? parts.join(" · ") : "—";
+  if (order.lineNotesSummary?.trim()) return order.lineNotesSummary.trim();
+  return "—";
 }
 
 // ---------------------------------------------------------------------------

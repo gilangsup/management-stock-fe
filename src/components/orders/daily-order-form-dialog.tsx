@@ -23,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { formatIdr } from "@/lib/format";
@@ -112,7 +111,6 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
   const [orderDate, setOrderDate] = useState(editData?.orderDate ?? today);
   const [deliveryDate, setDeliveryDate] = useState(editData?.deliveryDate ?? "");
   const [poNumber, setPoNumber] = useState(editData?.poNumber ?? "");
-  const [notes, setNotes] = useState(editData?.notes ?? "");
   const [status, setStatus] = useState<OrderStatus>(editData?.status ?? "draft");
   const [lines, setLines] = useState<DraftLine[]>(() =>
     editData?.lines.length ? editData.lines.map(lineFromExisting) : [newDraftLine()],
@@ -125,7 +123,6 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
       setOrderDate(editData.orderDate);
       setDeliveryDate(editData.deliveryDate ?? "");
       setPoNumber(editData.poNumber ?? "");
-      setNotes(editData.notes ?? "");
       setStatus(editData.status);
       setLines(editData.lines.length ? editData.lines.map(lineFromExisting) : [newDraftLine()]);
     }
@@ -230,7 +227,6 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
     setOrderDate(today);
     setDeliveryDate("");
     setPoNumber("");
-    setNotes("");
     setStatus("draft");
     setLines([newDraftLine()]);
   }
@@ -251,7 +247,7 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
         deliveryDate: deliveryDate || undefined,
         hotelId,
         poNumber: poNumber || undefined,
-        notes: notes || undefined,
+        ...(isEdit ? { notes: null } : {}),
         status,
         lines: lines
           .filter((l) => l.finishedProductId && Number(l.qty) > 0)
@@ -366,17 +362,6 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                   <SelectItem value="confirmed">Confirmed</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-2 sm:col-span-2 lg:col-span-1">
-              <Label>Catatan</Label>
-              <Textarea
-                placeholder="Catatan tambahan…"
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="resize-none"
-              />
             </div>
           </div>
 
@@ -514,9 +499,9 @@ export function DailyOrderFormDialog({ open, onOpenChange, editData, onSuccess }
                         />
                       </div>
 
-                      {/* Notes */}
+                      {/* Catatan per baris */}
                       <div className="space-y-1.5 sm:col-span-2">
-                        <Label className="text-xs">Catatan baris</Label>
+                        <Label className="text-xs">Catatan</Label>
                         <Input
                           placeholder="Opsional"
                           value={line.notes}

@@ -146,6 +146,7 @@ export function OrderDetailModal({ orderId, open, onClose, onEdit, onDeleted, on
                       <TableHead className="text-right">Qty</TableHead>
                       <TableHead className="text-right">Harga</TableHead>
                       <TableHead className="text-right">Subtotal</TableHead>
+                      <TableHead>Catatan</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -167,17 +168,15 @@ export function OrderDetailModal({ orderId, open, onClose, onEdit, onDeleted, on
                         <TableCell className="text-right font-medium tabular-nums">
                           {formatIdr(l.lineTotal)}
                         </TableCell>
+                        <TableCell className="max-w-[200px] text-sm text-muted-foreground">
+                          {l.notes?.trim() ? l.notes : "—"}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
 
-              {order.notes ? (
-                <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-                  {order.notes}
-                </p>
-              ) : null}
             </div>
           ) : null}
 
