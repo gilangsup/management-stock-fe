@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Loader2, ShoppingBag } from "lucide-react";
 import { DateField } from "@/components/forms/date-field";
 import {
@@ -15,6 +15,12 @@ import {
 import { api } from "@/lib/api";
 import { escapeHtml, printHtmlDocument } from "@/lib/export-utils";
 import { formatDate } from "@/lib/format";
+import {
+  formatNotesDisplay,
+  formatQtyDisplay,
+  groupProductsFlat,
+  type PerHotelSummaryRow,
+} from "@/lib/order-summary-display";
 import { OrderExportActions } from "@/components/orders/order-export-actions";
 
 type VendorSummaryLine = {
@@ -22,7 +28,10 @@ type VendorSummaryLine = {
   productName: string;
   itemCode: string;
   unitCode: string;
-  totalQty: string;
+  hotelCode: string;
+  hotelName: string;
+  qty: number;
+  notes: string;
 };
 
 type Props = {
@@ -44,16 +53,29 @@ export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
 
   const vendorLines = summaryQuery.data ?? [];
 
+  const productGroups = useMemo(() => {
+    const perHotel: PerHotelSummaryRow[] = vendorLines.map((l) => ({
+      hotelCode: l.hotelCode,
+      productName: l.productName,
+      itemCode: l.itemCode,
+      unitCode: l.unitCode,
+      qty: l.qty,
+      notes: l.notes?.trim() || "-",
+    }));
+    return groupProductsFlat(perHotel);
+  }, [vendorLines]);
+
   const printPdf = useCallback(() => {
-    const rows = vendorLines
+    const rows = productGroups
       .map(
-        (l, i) =>
+        (p, i) =>
           `<tr>
             <td>${i + 1}</td>
-            <td>${escapeHtml(l.productName)}</td>
-            <td>${escapeHtml(l.itemCode)}</td>
-            <td class="text-right">${Number(l.totalQty).toLocaleString("id-ID")}</td>
-            <td>${escapeHtml(l.unitCode)}</td>
+            <td>${escapeHtml(p.productName)}</td>
+            <td>${escapeHtml(p.itemCode)}</td>
+            <td class="text-right">${escapeHtml(formatQtyDisplay(p))}</td>
+            <td>${escapeHtml(p.unitCode)}</td>
+            <td>${escapeHtml(formatNotesDisplay(p))}</td>
           </tr>`,
       )
       .join("");
@@ -61,13 +83,13 @@ export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
     printHtmlDocument(
       `Beli Vendor ${viewDate}`,
       `<h1>Daftar Beli Vendor</h1>
-       <p class="meta">Tanggal PO: ${escapeHtml(formatDate(viewDate))} · ${vendorLines.length} produk</p>
+       <p class="meta">Tanggal PO: ${escapeHtml(formatDate(viewDate))} · ${productGroups.length} produk</p>
        <table>
-         <thead><tr><th>#</th><th>Produk</th><th>Kode</th><th class="text-right">Total Qty</th><th>Satuan</th></tr></thead>
+         <thead><tr><th>#</th><th>Produk</th><th>Kode</th><th class="text-right">Qty</th><th>Satuan</th><th>Catatan</th></tr></thead>
          <tbody>${rows}</tbody>
        </table>`,
     );
-  }, [vendorLines, viewDate]);
+  }, [productGroups, viewDate]);
 
   return (
     <div className="space-y-4">
@@ -85,7 +107,7 @@ export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
         <OrderExportActions
           date={viewDate}
           kind="vendor"
-          disabled={!vendorLines.length || summaryQuery.isLoading}
+          disabled={!productGroups.length || summaryQuery.isLoading}
           onPrintPdf={printPdf}
         />
       </div>
@@ -94,7 +116,7 @@ export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
         <div className="flex items-center gap-2 py-8 text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> Memuat…
         </div>
-      ) : vendorLines.length === 0 ? (
+      ) : productGroups.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
           <ShoppingBag className="mx-auto mb-3 size-8 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
@@ -109,22 +131,26 @@ export function DaftarVendorTab({ viewDate, onViewDateChange }: Props) {
                 <TableHead>#</TableHead>
                 <TableHead>Produk</TableHead>
                 <TableHead>Kode</TableHead>
-                <TableHead className="text-right">Total Qty</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
                 <TableHead>Satuan</TableHead>
+                <TableHead>Catatan</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {vendorLines.map((l, i) => (
-                <TableRow key={l.finishedProductId}>
+              {productGroups.map((p, i) => (
+                <TableRow key={`${p.itemCode}-${p.unitCode}`}>
                   <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                  <TableCell className="font-medium">{l.productName}</TableCell>
+                  <TableCell className="font-medium">{p.productName}</TableCell>
                   <TableCell className="font-mono text-sm text-muted-foreground">
-                    {l.itemCode}
+                    {p.itemCode}
                   </TableCell>
                   <TableCell className="text-right font-bold tabular-nums text-base">
-                    {Number(l.totalQty).toLocaleString("id-ID")}
+                    {formatQtyDisplay(p)}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{l.unitCode}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.unitCode}</TableCell>
+                  <TableCell className="max-w-[220px] text-sm text-muted-foreground">
+                    {formatNotesDisplay(p)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

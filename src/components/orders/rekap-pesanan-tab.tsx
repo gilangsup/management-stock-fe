@@ -25,6 +25,13 @@ import {
 import { api } from "@/lib/api";
 import { escapeHtml, printHtmlDocument } from "@/lib/export-utils";
 import { formatDate } from "@/lib/format";
+import {
+  buildSlotProductGroups,
+  formatNotesDisplay,
+  formatQtyDisplay,
+  ORDER_SLOT_ORDER,
+  type PerHotelSummaryRow,
+} from "@/lib/order-summary-display";
 import type { DailyOrderListItem } from "@/components/inventory/types";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import type { DeleteTarget } from "@/components/orders/order-delete-dialog";
@@ -118,14 +125,12 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
     notes: string;
   };
 
-  /** Label pendek untuk header slot di PDF (sesuai gambar: "CB 1", "CB 2", …) */
   const SLOT_SHORT: Record<string, string> = {
     CB1: "CB 1",
     CB2: "CB 2",
     CB3: "CB 3",
     unspecified: "Lainnya",
   };
-  const SLOT_ORDER = ["CB1", "CB2", "CB3", "unspecified"];
 
   const handleDownloadPdf = useCallback(async () => {
     setPdfLoading(true);
@@ -148,53 +153,17 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
       }
 
       // Kelompokkan per CB → produk → qty & catatan per hotel (dipisah "/")
-      type HotelEntry = { hotelCode: string; qty: number; notes: string };
-      type ProductGroup = {
-        productName: string;
-        unitCode: string;
-        byHotel: HotelEntry[];
-      };
+      const perHotelRows: PerHotelSummaryRow[] = lines.map((line) => ({
+        hotelCode: line.hotelCode,
+        deliverySlot: line.deliverySlot,
+        productName: line.productName,
+        itemCode: line.itemCode,
+        unitCode: line.unitCode,
+        qty: line.totalQty,
+        notes: line.notes?.trim() || "-",
+      }));
 
-      const slotMap = new Map<string, Map<string, ProductGroup>>();
-      for (const line of lines) {
-        if (!slotMap.has(line.deliverySlot)) {
-          slotMap.set(line.deliverySlot, new Map());
-        }
-        const products = slotMap.get(line.deliverySlot)!;
-        const productKey = `${line.itemCode}\0${line.unitCode}`;
-        if (!products.has(productKey)) {
-          products.set(productKey, {
-            productName: line.productName,
-            unitCode: line.unitCode,
-            byHotel: [],
-          });
-        }
-        products.get(productKey)!.byHotel.push({
-          hotelCode: line.hotelCode,
-          qty: line.totalQty,
-          notes: line.notes?.trim() || "-",
-        });
-      }
-
-      const formatQtyPart = (qty: number) =>
-        Number.isInteger(qty)
-          ? qty.toLocaleString("id-ID")
-          : qty.toLocaleString("id-ID", { maximumFractionDigits: 4 });
-
-      const sortedHotelEntries = (entries: HotelEntry[]) =>
-        [...entries].sort((a, b) => a.hotelCode.localeCompare(b.hotelCode));
-
-      const formatQtyCell = (group: ProductGroup) => {
-        const parts = sortedHotelEntries(group.byHotel).map((h) => formatQtyPart(h.qty));
-        const joined = parts.join("/");
-        return group.unitCode ? `${joined} ${group.unitCode}` : joined;
-      };
-
-      const formatNotesCell = (group: ProductGroup) => {
-        const parts = sortedHotelEntries(group.byHotel).map((h) => h.notes || "-");
-        if (parts.every((p) => p === "-")) return "-";
-        return parts.join(" / ");
-      };
+      const slotMap = buildSlotProductGroups(perHotelRows);
 
       // Info filter untuk header PDF
       const filterMeta = [
@@ -212,11 +181,9 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
         .join(" · ");
 
       // Bangun blok HTML per CB (semua hotel digabung)
-      const cbBlocks = SLOT_ORDER.filter((slot) => slotMap.has(slot))
+      const cbBlocks = ORDER_SLOT_ORDER.filter((slot) => slotMap.has(slot))
         .map((slot) => {
-          const products = Array.from(slotMap.get(slot)!.values()).sort((a, b) =>
-            a.productName.localeCompare(b.productName, "id"),
-          );
+          const products = slotMap.get(slot)!;
 
           const tableRows = products
             .map(
@@ -224,8 +191,8 @@ export function RekapPesananTab({ isAdmin, editLoadingId, onDetail, onEdit, onDe
                 `<tr>
                   <td class="col-no text-right">${i + 1}</td>
                   <td>${escapeHtml(p.productName)}</td>
-                  <td class="col-qty text-right">${escapeHtml(formatQtyCell(p))}</td>
-                  <td class="col-notes">${escapeHtml(formatNotesCell(p))}</td>
+                  <td class="col-qty text-right">${escapeHtml(formatQtyDisplay(p))}</td>
+                  <td class="col-notes">${escapeHtml(formatNotesDisplay(p))}</td>
                 </tr>`,
             )
             .join("");

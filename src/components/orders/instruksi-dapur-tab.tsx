@@ -16,6 +16,13 @@ import {
 import { api } from "@/lib/api";
 import { escapeHtml, printHtmlDocument } from "@/lib/export-utils";
 import { formatDate } from "@/lib/format";
+import {
+  aggregateRawLinesToPerHotelRows,
+  formatNotesDisplay,
+  formatQtyDisplay,
+  groupProductsBySlot,
+  ORDER_SLOT_ORDER,
+} from "@/lib/order-summary-display";
 import type { DeliverySlot } from "@/components/inventory/types";
 import { OrderExportActions } from "@/components/orders/order-export-actions";
 import { SLOT_LABELS } from "@/components/orders/daily-order-form-dialog";
@@ -29,17 +36,9 @@ type KitchenSummaryLine = {
   unitCode: string;
   qty: string;
   hotelName: string;
+  hotelCode: string;
   notes: string | null;
 };
-
-function groupBySlot(lines: KitchenSummaryLine[]): Map<DeliverySlot, KitchenSummaryLine[]> {
-  const slots: DeliverySlot[] = ["CB1", "CB2", "CB3", "unspecified"];
-  const m = new Map<DeliverySlot, KitchenSummaryLine[]>(slots.map((s) => [s, []]));
-  for (const l of lines) {
-    m.get(l.deliverySlot)!.push(l);
-  }
-  return m;
-}
 
 type Props = {
   viewDate: string;
@@ -59,42 +58,58 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
   });
 
   const kitchenLines = summaryQuery.data ?? [];
-  const bySlot = useMemo(() => groupBySlot(kitchenLines), [kitchenLines]);
+
+  const bySlot = useMemo(() => {
+    const perHotel = aggregateRawLinesToPerHotelRows(
+      kitchenLines.map((l) => ({
+        deliverySlot: l.deliverySlot,
+        itemCode: l.itemCode,
+        unitCode: l.unitCode,
+        productName: l.productName,
+        hotelCode: l.hotelCode,
+        qty: l.qty,
+        notes: l.notes,
+      })),
+    );
+    return groupProductsBySlot(perHotel);
+  }, [kitchenLines]);
+
+  const productCount = useMemo(
+    () => Array.from(bySlot.values()).reduce((sum, groups) => sum + groups.length, 0),
+    [bySlot],
+  );
 
   const printPdf = useCallback(() => {
-    const slots: DeliverySlot[] = ["CB1", "CB2", "CB3", "unspecified"];
-    const sections = slots
-      .map((slot) => {
-        const lines = bySlot.get(slot) ?? [];
-        if (!lines.length) return "";
-        const rows = lines
-          .map(
-            (l, i) =>
-              `<tr>
-                <td>${i + 1}</td>
-                <td>${escapeHtml(l.productName)} - ${escapeHtml(l.itemCode)}</td>
-                <td class="text-right">${Number(l.qty).toLocaleString("id-ID")} ${escapeHtml(l.unitCode)}</td>
-                <td>${escapeHtml(l.notes ?? "—")}</td>
-              </tr>`,
-          )
-          .join("");
-        return `<div class="section">
-          <h2>${escapeHtml(SLOT_LABELS[slot])}</h2>
-          <table>
-            <thead><tr><th>#</th><th>Produk</th><th class="text-right">Qty</th><th>Catatan</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
-      })
-      .join("");
+    const sections = ORDER_SLOT_ORDER.map((slot) => {
+      const products = bySlot.get(slot) ?? [];
+      if (!products.length) return "";
+      const rows = products
+        .map(
+          (p, i) =>
+            `<tr>
+              <td>${i + 1}</td>
+              <td>${escapeHtml(p.productName)} - ${escapeHtml(p.itemCode)}</td>
+              <td class="text-right">${escapeHtml(formatQtyDisplay(p))}</td>
+              <td>${escapeHtml(formatNotesDisplay(p))}</td>
+            </tr>`,
+        )
+        .join("");
+      return `<div class="section">
+        <h2>${escapeHtml(SLOT_LABELS[slot])}</h2>
+        <table>
+          <thead><tr><th>#</th><th>Produk</th><th class="text-right">Qty</th><th>Catatan</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }).join("");
 
     printHtmlDocument(
       `Instruksi Dapur ${viewDate}`,
       `<h1>Instruksi Dapur</h1>
-       <p class="meta">Tanggal PO: ${escapeHtml(formatDate(viewDate))} · ${kitchenLines.length} item</p>
+       <p class="meta">Tanggal PO: ${escapeHtml(formatDate(viewDate))} · ${productCount} produk</p>
        ${sections}`,
     );
-  }, [bySlot, kitchenLines.length, viewDate]);
+  }, [bySlot, productCount, viewDate]);
 
   return (
     <div className="space-y-4">
@@ -112,7 +127,7 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
         <OrderExportActions
           date={viewDate}
           kind="kitchen"
-          disabled={!kitchenLines.length || summaryQuery.isLoading}
+          disabled={!productCount || summaryQuery.isLoading}
           onPrintPdf={printPdf}
         />
       </div>
@@ -121,7 +136,7 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
         <div className="flex items-center gap-2 py-8 text-muted-foreground">
           <Loader2 className="size-4 animate-spin" /> Memuat…
         </div>
-      ) : kitchenLines.length === 0 ? (
+      ) : productCount === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
           <ChefHat className="mx-auto mb-3 size-8 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
@@ -132,15 +147,15 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
         </div>
       ) : (
         <div className="space-y-6">
-          {(["CB1", "CB2", "CB3", "unspecified"] as DeliverySlot[]).map((slot) => {
-            const lines = bySlot.get(slot) ?? [];
-            if (!lines.length) return null;
+          {ORDER_SLOT_ORDER.map((slot) => {
+            const products = bySlot.get(slot) ?? [];
+            if (!products.length) return null;
             return (
               <div key={slot} className="space-y-2">
                 <div className="flex items-center gap-2">
                   <CalendarDays className="size-4 text-primary" />
                   <h3 className="font-semibold">{SLOT_LABELS[slot]}</h3>
-                  <Badge variant="secondary">{lines.length} item</Badge>
+                  <Badge variant="secondary">{products.length} produk</Badge>
                 </div>
                 <div className="surface-table-wrap">
                   <Table>
@@ -148,25 +163,23 @@ export function InstruksiDapurTab({ viewDate, onViewDateChange }: Props) {
                       <TableRow>
                         <TableHead>#</TableHead>
                         <TableHead>Produk</TableHead>
-                        <TableHead>Hotel</TableHead>
                         <TableHead className="text-right">Qty</TableHead>
                         <TableHead>Catatan</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {lines.map((l, i) => (
-                        <TableRow key={l.id}>
+                      {products.map((p, i) => (
+                        <TableRow key={`${slot}-${p.itemCode}-${p.unitCode}`}>
                           <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                           <TableCell>
-                            <p className="font-medium">{l.productName}</p>
-                            <p className="font-mono text-xs text-muted-foreground">{l.itemCode}</p>
+                            <p className="font-medium">{p.productName}</p>
+                            <p className="font-mono text-xs text-muted-foreground">{p.itemCode}</p>
                           </TableCell>
-                          <TableCell className="text-sm">{l.hotelName}</TableCell>
                           <TableCell className="text-right font-semibold tabular-nums">
-                            {Number(l.qty).toLocaleString("id-ID")} {l.unitCode}
+                            {formatQtyDisplay(p)}
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {l.notes ?? "—"}
+                          <TableCell className="max-w-[220px] text-sm text-muted-foreground">
+                            {formatNotesDisplay(p)}
                           </TableCell>
                         </TableRow>
                       ))}

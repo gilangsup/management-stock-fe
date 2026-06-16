@@ -38,14 +38,63 @@ type Hotel = { id: string; name: string };
 
 type GroupBy = "none" | "day" | "week" | "month" | "year";
 
+type PoFilter = "all" | "with" | "without";
+
 type InvoiceListRow = {
   id: string;
   transactionCode: string;
   saleDate: string;
   grandTotal: string;
   totalQty: string;
+  poNumber: string | null;
   hotel: { code: string; name: string };
 };
+
+const PO_FILTER_LABELS: Record<PoFilter, string> = {
+  all: "Semua",
+  with: "Dengan PO",
+  without: "Tanpa PO",
+};
+
+function formatPoNumber(po: string | null | undefined): string {
+  const v = po?.trim();
+  return v ? v : "—";
+}
+
+async function fetchAllInvoicesForPrint(params: {
+  from: string;
+  to: string;
+  hotelId?: string;
+}): Promise<InvoiceListRow[]> {
+  const all: InvoiceListRow[] = [];
+  let page = 1;
+  const limit = 200;
+
+  while (true) {
+    const queryParams: Record<string, string> = {
+      from: params.from,
+      to: params.to,
+      groupBy: "none",
+      page: String(page),
+      limit: String(limit),
+      poFilter: "all",
+    };
+    if (params.hotelId) queryParams.hotelId = params.hotelId;
+
+    const { data } = await api.get<{
+      data: { mode: "list"; invoices: InvoiceListRow[] };
+      meta: { total?: number };
+    }>("/reports/sales-invoices", { params: queryParams });
+
+    if (data.data.mode !== "list") break;
+    all.push(...data.data.invoices);
+    const total = data.meta.total ?? all.length;
+    if (all.length >= total) break;
+    page += 1;
+  }
+
+  return all;
+}
 
 type GroupedRow = {
   period: string;
@@ -68,7 +117,9 @@ export function SalesInvoicesReportTab() {
   const [customTo, setCustomTo] = useState(anchor);
   const [hotelId, setHotelId] = useState("");
   const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [poFilter, setPoFilter] = useState<PoFilter>("all");
   const [page, setPage] = useState(1);
+  const [isPrinting, setIsPrinting] = useState(false);
   const { from, to } = resolveDateRange(preset, customFrom, customTo);
 
   const hotels = useQuery({
@@ -80,13 +131,14 @@ export function SalesInvoicesReportTab() {
   });
 
   const query = useQuery({
-    queryKey: ["reports", "sales-invoices", from, to, hotelId, groupBy, page],
+    queryKey: ["reports", "sales-invoices", from, to, hotelId, groupBy, poFilter, page],
     queryFn: async () => {
       const params: Record<string, string> = { from, to, groupBy };
       if (hotelId) params.hotelId = hotelId;
       if (groupBy === "none") {
         params.page = String(page);
         params.limit = "50";
+        params.poFilter = poFilter;
       }
       const { data } = await api.get<{
         data:
@@ -113,7 +165,7 @@ export function SalesInvoicesReportTab() {
   const limit = query.data?.meta.limit ?? 50;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  const printPdf = useCallback(() => {
+  const printPdf = useCallback(async () => {
     const rekapStyles = `
       body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #111; margin: 12mm 14mm; }
       .report-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 2px solid #222; padding-bottom: 8px; }
@@ -174,61 +226,75 @@ export function SalesInvoicesReportTab() {
       return;
     }
 
-    const totalQtyAll = listRows.reduce((s, r) => s + Number(r.totalQty), 0);
-    const body = listRows
-      .map(
-        (r) =>
-          `<tr>
-            <td>${escapeHtml(r.transactionCode)}</td>
-            <td>${escapeHtml(formatDate(r.saleDate))}</td>
-            <td>${escapeHtml(r.hotel.code)}</td>
-            <td class="num">${Number(r.totalQty).toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
-            <td class="num">${escapeHtml(formatIdr(r.grandTotal))}</td>
-          </tr>`,
-      )
-      .join("");
-    printHtmlDocument(
-      `Laporan Penjualan ${from}–${to}`,
-      `<style>${rekapStyles}</style>
-       <div class="report-header">
-         <div class="company-block">
-           <p class="report-title">LAPORAN PENJUALAN REKAP</p>
-           <p class="company-name">${escapeHtml(APP_NAME)}</p>
-           <p class="company-detail">${escapeHtml(COMPANY_ADDRESS)}</p>
-           <p class="company-detail">${escapeHtml(COMPANY_PHONES)}</p>
+    setIsPrinting(true);
+    try {
+      const pdfRows = await fetchAllInvoicesForPrint({
+        from,
+        to,
+        hotelId: hotelId || undefined,
+      });
+
+      const pdfGrandTotal = pdfRows.reduce((s, r) => s + Number(r.grandTotal), 0);
+      const totalQtyAll = pdfRows.reduce((s, r) => s + Number(r.totalQty), 0);
+      const body = pdfRows
+        .map(
+          (r) =>
+            `<tr>
+              <td>${escapeHtml(formatDate(r.saleDate))}</td>
+              <td>${escapeHtml(r.hotel.name)}</td>
+              <td>${escapeHtml(formatPoNumber(r.poNumber))}</td>
+              <td>${escapeHtml(r.transactionCode)}</td>
+              <td class="num">${Number(r.totalQty).toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+              <td class="num">${escapeHtml(formatIdr(r.grandTotal))}</td>
+            </tr>`,
+        )
+        .join("");
+      printHtmlDocument(
+        `Laporan Penjualan ${from}–${to}`,
+        `<style>${rekapStyles}</style>
+         <div class="report-header">
+           <div class="company-block">
+             <p class="report-title">LAPORAN PENJUALAN REKAP</p>
+             <p class="company-name">${escapeHtml(APP_NAME)}</p>
+             <p class="company-detail">${escapeHtml(COMPANY_ADDRESS)}</p>
+             <p class="company-detail">${escapeHtml(COMPANY_PHONES)}</p>
+           </div>
+           <div class="periode-block">
+             <p><strong>PERIODE :</strong> ${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))}</p>
+             <p>Hotel : ${escapeHtml(hotelLabel)}</p>
+           </div>
          </div>
-         <div class="periode-block">
-           <p><strong>PERIODE :</strong> ${escapeHtml(formatDate(from))} – ${escapeHtml(formatDate(to))}</p>
-           <p>Hotel : ${escapeHtml(hotelLabel)}</p>
-         </div>
-       </div>
-       <table>
-         <thead>
-           <tr>
-             <th>No Transaksi</th>
-             <th>Tanggal</th>
-             <th>Kode Pelanggan</th>
-             <th class="num">Jml Item</th>
-             <th class="num">Sub Total</th>
-           </tr>
-         </thead>
-         <tbody>${body}</tbody>
-         <tfoot>
-           <tr>
-             <td colspan="3"><strong>TOTAL KESELURUHAN :</strong></td>
-             <td class="num">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
-             <td class="num">${escapeHtml(formatIdr(grandTotal))}</td>
-           </tr>
-         </tfoot>
-       </table>
-       <div class="summary-block">
-         <table class="summary-table">
-           <tr><td class="label">Jumlah Item</td><td class="label">:</td><td class="val">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td></tr>
-           <tr><td class="label">Sub Total</td><td class="label">:</td><td class="val">${escapeHtml(formatIdr(grandTotal))}</td></tr>
+         <table>
+           <thead>
+             <tr>
+               <th>Tanggal</th>
+               <th>Hotel</th>
+               <th>No PO</th>
+               <th>No Faktur</th>
+               <th class="num">Jml Item</th>
+               <th class="num">Sub Total</th>
+             </tr>
+           </thead>
+           <tbody>${body}</tbody>
+           <tfoot>
+             <tr>
+               <td colspan="4"><strong>TOTAL KESELURUHAN :</strong></td>
+               <td class="num">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td>
+               <td class="num">${escapeHtml(formatIdr(String(pdfGrandTotal)))}</td>
+             </tr>
+           </tfoot>
          </table>
-       </div>`,
-    );
-  }, [mode, groupedRows, listRows, from, to, groupBy, hotelLabel, grandTotal]);
+         <div class="summary-block">
+           <table class="summary-table">
+             <tr><td class="label">Jumlah Item</td><td class="label">:</td><td class="val">${totalQtyAll.toLocaleString("id-ID", { minimumFractionDigits: 2 })}</td></tr>
+             <tr><td class="label">Sub Total</td><td class="label">:</td><td class="val">${escapeHtml(formatIdr(String(pdfGrandTotal)))}</td></tr>
+           </table>
+         </div>`,
+      );
+    } finally {
+      setIsPrinting(false);
+    }
+  }, [mode, groupedRows, from, to, groupBy, hotelLabel, grandTotal, hotelId]);
 
   const hasData = mode === "grouped" ? groupedRows.length > 0 : listRows.length > 0;
 
@@ -252,7 +318,7 @@ export function SalesInvoicesReportTab() {
             setPage(1);
           }}
         />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <ReportHotelFilter
             hotelId={hotelId}
             onHotelIdChange={(v) => {
@@ -282,6 +348,29 @@ export function SalesInvoicesReportTab() {
               </SelectContent>
             </Select>
           </div>
+          {groupBy === "none" ? (
+            <div className="space-y-2">
+              <Label>Status PO</Label>
+              <Select
+                value={poFilter}
+                onValueChange={(v) => {
+                  setPoFilter((v ?? "all") as PoFilter);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(PO_FILTER_LABELS) as PoFilter[]).map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {PO_FILTER_LABELS[k]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </div>
         <ReportResetButton
           onReset={() => {
@@ -290,6 +379,7 @@ export function SalesInvoicesReportTab() {
             setCustomTo(anchor);
             setHotelId("");
             setGroupBy("none");
+            setPoFilter("all");
             setPage(1);
           }}
         />
@@ -302,8 +392,8 @@ export function SalesInvoicesReportTab() {
         <ReportExportActions
           exportPath="/reports/sales-invoices/export"
           params={{ from, to, hotelId: hotelId || undefined, groupBy }}
-          onPrintPdf={printPdf}
-          disabled={!hasData || query.isLoading}
+          onPrintPdf={() => void printPdf()}
+          disabled={!hasData || query.isLoading || isPrinting}
           label="laporan faktur"
         />
       </div>
@@ -335,9 +425,10 @@ export function SalesInvoicesReportTab() {
             <>
               <TableHeader>
                 <TableRow>
-                  <TableHead>No Transaksi</TableHead>
                   <TableHead>Tanggal</TableHead>
-                  <TableHead>Kode Pelanggan</TableHead>
+                  <TableHead>Hotel</TableHead>
+                  <TableHead>No PO</TableHead>
+                  <TableHead>No Faktur</TableHead>
                   <TableHead className="text-right">Jml Item</TableHead>
                   <TableHead className="text-right">Sub Total</TableHead>
                 </TableRow>
@@ -345,12 +436,15 @@ export function SalesInvoicesReportTab() {
               <TableBody>
                 {listRows.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="font-mono text-sm">{r.transactionCode}</TableCell>
                     <TableCell>{formatDate(r.saleDate)}</TableCell>
                     <TableCell>
                       <span className="font-mono text-xs font-semibold text-primary">{r.hotel.code}</span>
                       <span className="ml-1 text-xs text-muted-foreground">{r.hotel.name}</span>
                     </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {formatPoNumber(r.poNumber)}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{r.transactionCode}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {Number(r.totalQty).toLocaleString("id-ID", { minimumFractionDigits: 2 })}
                     </TableCell>
@@ -365,7 +459,7 @@ export function SalesInvoicesReportTab() {
           {!hasData && (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                   {query.isLoading ? (
                     <span className="inline-flex items-center gap-2">
                       <Loader2 className="size-4 animate-spin" /> Memuat…

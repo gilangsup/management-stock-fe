@@ -4,9 +4,44 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
-import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
+import { getReactNodeText, matchesSearchQuery } from "@/lib/react-node-text"
+import { Input } from "@/components/ui/input"
+import { ChevronDownIcon, CheckIcon, ChevronUpIcon, Search } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+type SelectSearchContextValue = {
+  query: string
+  setQuery: (query: string) => void
+  searchable: boolean
+}
+
+const SelectSearchContext = React.createContext<SelectSearchContextValue | null>(null)
+
+const SelectSearchResetRefContext = React.createContext<
+  React.MutableRefObject<(() => void) | null> | null
+>(null)
+
+function useSelectSearchContext() {
+  return React.useContext(SelectSearchContext)
+}
+
+function Select<Value, Multiple extends boolean | undefined = false>(
+  props: SelectPrimitive.Root.Props<Value, Multiple>,
+) {
+  const searchResetRef = React.useRef<(() => void) | null>(null)
+  const { onOpenChange, ...rest } = props
+
+  return (
+    <SelectSearchResetRefContext.Provider value={searchResetRef}>
+      <SelectPrimitive.Root<Value, Multiple>
+        {...rest}
+        onOpenChange={(open, eventDetails) => {
+          if (!open) searchResetRef.current?.()
+          onOpenChange?.(open, eventDetails)
+        }}
+      />
+    </SelectSearchResetRefContext.Provider>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -56,6 +91,55 @@ function SelectTrigger({
   )
 }
 
+function SelectSearchInput({
+  placeholder,
+  listId,
+}: {
+  placeholder: string
+  listId: string
+}) {
+  const ctx = useSelectSearchContext()
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  if (!ctx?.searchable) return null
+
+  return (
+    <div
+      className="sticky top-0 z-20 border-b border-border bg-popover p-1.5"
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="relative">
+        <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          ref={inputRef}
+          value={ctx.query}
+          onChange={(e) => ctx.setQuery(e.target.value)}
+          placeholder={placeholder}
+          className="h-8 pl-8 text-sm"
+          autoComplete="off"
+          autoFocus
+          aria-controls={listId}
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            if (e.key === "Escape") {
+              ctx.setQuery("")
+              return
+            }
+            if (e.key === "ArrowDown" || e.key === "Enter") {
+              e.preventDefault()
+              const list = document.getElementById(listId)
+              const firstItem = list?.querySelector<HTMLElement>(
+                '[data-slot="select-item"]:not([hidden])',
+              )
+              firstItem?.focus()
+            }
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 function SelectContent({
   className,
   children,
@@ -64,34 +148,67 @@ function SelectContent({
   align = "center",
   alignOffset = 0,
   alignItemWithTrigger = true,
+  searchable = true,
+  searchPlaceholder = "Cari…",
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
-  >) {
+  > & {
+    /** Aktifkan kotak pencarian di dalam dropdown. Default: true */
+    searchable?: boolean
+    searchPlaceholder?: string
+  }) {
+  const [query, setQuery] = React.useState("")
+  const listId = React.useId()
+  const searchResetRef = React.useContext(SelectSearchResetRefContext)
+
+  React.useEffect(() => {
+    if (!searchResetRef) return
+    searchResetRef.current = () => setQuery("")
+    return () => {
+      searchResetRef.current = null
+    }
+  }, [searchResetRef])
+
+  const searchContext = React.useMemo<SelectSearchContextValue>(
+    () => ({
+      query,
+      setQuery,
+      searchable,
+    }),
+    [query, searchable],
+  )
+
   return (
-    <SelectPrimitive.Portal>
-      <SelectPrimitive.Positioner
-        side={side}
-        sideOffset={sideOffset}
-        align={align}
-        alignOffset={alignOffset}
-        alignItemWithTrigger={alignItemWithTrigger}
-        className="isolate z-50"
-      >
-        <SelectPrimitive.Popup
-          data-slot="select-content"
-          data-align-trigger={alignItemWithTrigger}
-          className={cn("relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
-          {...props}
+    <SelectSearchContext.Provider value={searchContext}>
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Positioner
+          side={side}
+          sideOffset={sideOffset}
+          align={align}
+          alignOffset={alignOffset}
+          alignItemWithTrigger={alignItemWithTrigger}
+          className="isolate z-50"
         >
-          <SelectScrollUpButton />
-          <SelectPrimitive.List>{children}</SelectPrimitive.List>
-          <SelectScrollDownButton />
-        </SelectPrimitive.Popup>
-      </SelectPrimitive.Positioner>
-    </SelectPrimitive.Portal>
+          <SelectPrimitive.Popup
+            data-slot="select-content"
+            data-align-trigger={alignItemWithTrigger}
+            className={cn(
+              "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+              className,
+            )}
+            {...props}
+          >
+            <SelectSearchInput placeholder={searchPlaceholder} listId={listId} />
+            <SelectScrollUpButton />
+            <SelectPrimitive.List id={listId}>{children}</SelectPrimitive.List>
+            <SelectScrollDownButton />
+          </SelectPrimitive.Popup>
+        </SelectPrimitive.Positioner>
+      </SelectPrimitive.Portal>
+    </SelectSearchContext.Provider>
   )
 }
 
@@ -111,11 +228,28 @@ function SelectLabel({
 function SelectItem({
   className,
   children,
+  searchLabel,
+  value,
   ...props
-}: SelectPrimitive.Item.Props) {
+}: SelectPrimitive.Item.Props & {
+  /** Teks untuk filter pencarian; default dari label item */
+  searchLabel?: string
+}) {
+  const searchCtx = useSelectSearchContext()
+  const label = searchLabel ?? getReactNodeText(children)
+
+  if (
+    searchCtx?.searchable &&
+    value != null &&
+    !matchesSearchQuery(label, searchCtx.query)
+  ) {
+    return null
+  }
+
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
+      value={value}
       className={cn(
         "relative flex w-full cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className
