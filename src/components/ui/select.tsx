@@ -5,23 +5,28 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
 import { getReactNodeText, matchesSearchQuery } from "@/lib/react-node-text"
+import { SEARCH_DEBOUNCE_MS, useDebounce } from "@/hooks/use-debounce"
 import { Input } from "@/components/ui/input"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon, Search } from "lucide-react"
 
-type SelectSearchContextValue = {
-  query: string
-  setQuery: (query: string) => void
+type SelectSearchFilterContextValue = {
+  debouncedQuery: string
   searchable: boolean
 }
 
-const SelectSearchContext = React.createContext<SelectSearchContextValue | null>(null)
+const SelectSearchFilterContext =
+  React.createContext<SelectSearchFilterContextValue | null>(null)
 
 const SelectSearchResetRefContext = React.createContext<
   React.MutableRefObject<(() => void) | null> | null
 >(null)
 
-function useSelectSearchContext() {
-  return React.useContext(SelectSearchContext)
+const SelectSearchInputResetRefContext = React.createContext<
+  React.MutableRefObject<(() => void) | null> | null
+>(null)
+
+function useSelectSearchFilterContext() {
+  return React.useContext(SelectSearchFilterContext)
 }
 
 function Select<Value, Multiple extends boolean | undefined = false>(
@@ -94,14 +99,61 @@ function SelectTrigger({
 function SelectSearchInput({
   placeholder,
   listId,
+  onDebouncedQueryChange,
 }: {
   placeholder: string
   listId: string
+  onDebouncedQueryChange: (query: string) => void
 }) {
-  const ctx = useSelectSearchContext()
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  const inputResetRef = React.useContext(SelectSearchInputResetRefContext)
+  const [query, setQuery] = React.useState("")
+  const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
 
-  if (!ctx?.searchable) return null
+  const onDebouncedQueryChangeRef = React.useRef(onDebouncedQueryChange)
+  onDebouncedQueryChangeRef.current = onDebouncedQueryChange
+
+  React.useEffect(() => {
+    onDebouncedQueryChangeRef.current(debouncedQuery)
+  }, [debouncedQuery])
+
+  React.useEffect(() => {
+    if (!inputResetRef) return
+    inputResetRef.current = () => setQuery("")
+    return () => {
+      inputResetRef.current = null
+    }
+  }, [inputResetRef])
+
+  const clearSearch = React.useCallback(() => {
+    setQuery("")
+    onDebouncedQueryChangeRef.current("")
+  }, [])
+
+  const handleChange = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setQuery(e.target.value)
+    },
+    [],
+  )
+
+  const handleKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      e.stopPropagation()
+      if (e.key === "Escape") {
+        clearSearch()
+        return
+      }
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        e.preventDefault()
+        const list = document.getElementById(listId)
+        const firstItem = list?.querySelector<HTMLElement>(
+          '[data-slot="select-item"]:not([hidden])',
+        )
+        firstItem?.focus()
+      }
+    },
+    [clearSearch, listId],
+  )
 
   return (
     <div
@@ -111,29 +163,14 @@ function SelectSearchInput({
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
-          ref={inputRef}
-          value={ctx.query}
-          onChange={(e) => ctx.setQuery(e.target.value)}
+          value={query}
+          onChange={handleChange}
           placeholder={placeholder}
           className="h-8 pl-8 text-sm"
           autoComplete="off"
           autoFocus
           aria-controls={listId}
-          onKeyDown={(e) => {
-            e.stopPropagation()
-            if (e.key === "Escape") {
-              ctx.setQuery("")
-              return
-            }
-            if (e.key === "ArrowDown" || e.key === "Enter") {
-              e.preventDefault()
-              const list = document.getElementById(listId)
-              const firstItem = list?.querySelector<HTMLElement>(
-                '[data-slot="select-item"]:not([hidden])',
-              )
-              firstItem?.focus()
-            }
-          }}
+          onKeyDown={handleKeyDown}
         />
       </div>
     </div>
@@ -160,55 +197,70 @@ function SelectContent({
     searchable?: boolean
     searchPlaceholder?: string
   }) {
-  const [query, setQuery] = React.useState("")
+  const [debouncedQuery, setDebouncedQuery] = React.useState("")
   const listId = React.useId()
   const searchResetRef = React.useContext(SelectSearchResetRefContext)
+  const searchInputResetRef = React.useRef<(() => void) | null>(null)
+
+  const handleDebouncedQueryChange = React.useCallback((query: string) => {
+    setDebouncedQuery(query)
+  }, [])
 
   React.useEffect(() => {
     if (!searchResetRef) return
-    searchResetRef.current = () => setQuery("")
+    searchResetRef.current = () => {
+      setDebouncedQuery("")
+      searchInputResetRef.current?.()
+    }
     return () => {
       searchResetRef.current = null
     }
   }, [searchResetRef])
 
-  const searchContext = React.useMemo<SelectSearchContextValue>(
+  const filterContext = React.useMemo<SelectSearchFilterContextValue>(
     () => ({
-      query,
-      setQuery,
+      debouncedQuery,
       searchable,
     }),
-    [query, searchable],
+    [debouncedQuery, searchable],
   )
 
   return (
-    <SelectSearchContext.Provider value={searchContext}>
-      <SelectPrimitive.Portal>
-        <SelectPrimitive.Positioner
-          side={side}
-          sideOffset={sideOffset}
-          align={align}
-          alignOffset={alignOffset}
-          alignItemWithTrigger={alignItemWithTrigger}
-          className="isolate z-50"
-        >
-          <SelectPrimitive.Popup
-            data-slot="select-content"
-            data-align-trigger={alignItemWithTrigger}
-            className={cn(
-              "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-              className,
-            )}
-            {...props}
+    <SelectSearchFilterContext.Provider value={filterContext}>
+      <SelectSearchInputResetRefContext.Provider value={searchInputResetRef}>
+        <SelectPrimitive.Portal>
+          <SelectPrimitive.Positioner
+            side={side}
+            sideOffset={sideOffset}
+            align={align}
+            alignOffset={alignOffset}
+            alignItemWithTrigger={alignItemWithTrigger}
+            className="isolate z-50"
           >
-            <SelectSearchInput placeholder={searchPlaceholder} listId={listId} />
-            <SelectScrollUpButton />
-            <SelectPrimitive.List id={listId}>{children}</SelectPrimitive.List>
-            <SelectScrollDownButton />
-          </SelectPrimitive.Popup>
-        </SelectPrimitive.Positioner>
-      </SelectPrimitive.Portal>
-    </SelectSearchContext.Provider>
+            <SelectPrimitive.Popup
+              data-slot="select-content"
+              data-align-trigger={alignItemWithTrigger}
+              className={cn(
+                "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+                className,
+              )}
+              {...props}
+            >
+              {searchable ? (
+                <SelectSearchInput
+                  placeholder={searchPlaceholder}
+                  listId={listId}
+                  onDebouncedQueryChange={handleDebouncedQueryChange}
+                />
+              ) : null}
+              <SelectScrollUpButton />
+              <SelectPrimitive.List id={listId}>{children}</SelectPrimitive.List>
+              <SelectScrollDownButton />
+            </SelectPrimitive.Popup>
+          </SelectPrimitive.Positioner>
+        </SelectPrimitive.Portal>
+      </SelectSearchInputResetRefContext.Provider>
+    </SelectSearchFilterContext.Provider>
   )
 }
 
@@ -225,7 +277,7 @@ function SelectLabel({
   )
 }
 
-function SelectItem({
+const SelectItem = React.memo(function SelectItem({
   className,
   children,
   searchLabel,
@@ -235,13 +287,16 @@ function SelectItem({
   /** Teks untuk filter pencarian; default dari label item */
   searchLabel?: string
 }) {
-  const searchCtx = useSelectSearchContext()
-  const label = searchLabel ?? getReactNodeText(children)
+  const searchCtx = useSelectSearchFilterContext()
+  const label = React.useMemo(
+    () => searchLabel ?? getReactNodeText(children),
+    [searchLabel, children],
+  )
 
   if (
     searchCtx?.searchable &&
     value != null &&
-    !matchesSearchQuery(label, searchCtx.query)
+    !matchesSearchQuery(label, searchCtx.debouncedQuery)
   ) {
     return null
   }
@@ -268,7 +323,7 @@ function SelectItem({
       </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   )
-}
+})
 
 function SelectSeparator({
   className,

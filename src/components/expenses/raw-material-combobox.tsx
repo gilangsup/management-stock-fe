@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -42,14 +43,9 @@ export function RawMaterialCombobox({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
+  const debouncedQ = useDebounce(q.trim());
   const [searchScope, setSearchScope] = useState<SearchScope>("__all__");
   const [picked, setPicked] = useState<RawMaterialRow | null>(null);
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedQ(q.trim()), 300);
-    return () => window.clearTimeout(t);
-  }, [q]);
 
   useEffect(() => {
     if (!value) setPicked(null);
@@ -102,11 +98,9 @@ export function RawMaterialCombobox({
         setOpen(next);
         if (next) {
           setQ("");
-          setDebouncedQ("");
           setSearchScope("__all__");
         } else {
           setQ("");
-          setDebouncedQ("");
         }
       }}
     >
@@ -149,6 +143,7 @@ export function RawMaterialCombobox({
             className="h-9 flex-1"
             autoComplete="off"
             autoFocus
+            onPointerDown={(e) => e.stopPropagation()}
           />
           <Select
             value={searchScope}
@@ -207,7 +202,6 @@ export function RawMaterialCombobox({
                         setPicked(r);
                         setOpen(false);
                         setQ("");
-                        setDebouncedQ("");
                       }}
                     >
                       <Check

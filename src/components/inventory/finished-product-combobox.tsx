@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -35,13 +36,8 @@ export function FinishedProductCombobox({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
+  const debouncedQ = useDebounce(q.trim());
   const [picked, setPicked] = useState<FinishedProductRow | null>(null);
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedQ(q.trim()), 300);
-    return () => window.clearTimeout(t);
-  }, [q]);
 
   useEffect(() => {
     if (!value) {
@@ -91,13 +87,7 @@ export function FinishedProductCombobox({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) {
-          setQ("");
-          setDebouncedQ("");
-        } else {
-          setQ("");
-          setDebouncedQ("");
-        }
+        setQ("");
       }}
     >
       <PopoverTrigger
@@ -139,6 +129,7 @@ export function FinishedProductCombobox({
           className="h-9"
           autoComplete="off"
           autoFocus
+          onPointerDown={(e) => e.stopPropagation()}
         />
         <p className="text-[11px] text-muted-foreground">Pencarian lewat server.</p>
         {listQuery.isError ? (
@@ -172,7 +163,6 @@ export function FinishedProductCombobox({
                         onProductSelect?.(r);
                         setOpen(false);
                         setQ("");
-                        setDebouncedQ("");
                       }}
                     >
                       <Check
