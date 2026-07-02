@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { CheckSquare2, Loader2, Pencil, Plus, Printer, Square, Trash2, X } from "lucide-react";
+import { CheckSquare2, FileText, Loader2, Paperclip, Pencil, Plus, Printer, Square, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -90,8 +90,41 @@ export default function InvoiceExchangePage() {
   const [exchangeDate, setExchangeDate] = useState(today);
   const [notes, setNotes] = useState("");
 
+  // File upload state (create mode only)
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<ExchangeRow | null>(null);
+
+  const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setFileError("");
+    if (!file) { setUploadFile(null); return; }
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setFileError("Tipe file tidak didukung. Gunakan PDF, JPG, JPEG, atau PNG.");
+      setUploadFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setFileError("Ukuran file melebihi batas maksimal 5MB.");
+      setUploadFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setUploadFile(file);
+  }
+
+  function removeFile() {
+    setUploadFile(null);
+    setFileError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
 
   const hotels = useQuery({
     queryKey: ["hotels"],
@@ -270,6 +303,9 @@ export default function InvoiceExchangePage() {
     setHotelId("");
     setExchangeDate(today);
     setNotes("");
+    setUploadFile(null);
+    setFileError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setOpen(true);
   }
 
@@ -290,6 +326,9 @@ export default function InvoiceExchangePage() {
     setSelectedTxnIds([]);
     setTxnLinesCache({});
     setManualLines([]);
+    setUploadFile(null);
+    setFileError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function handleManualAmountChange(i: number, v: string) {
@@ -312,14 +351,19 @@ export default function InvoiceExchangePage() {
 
   const createExchange = useMutation({
     mutationFn: async () => {
-      const payload = {
-        hotelId,
-        exchangeDate,
-        notes: notes || undefined,
-        lines: validLines.map((l) => ({ description: l.description.trim(), amount: Number(l.amount) })),
-        transactionIds: selectedTxnIds.length > 0 ? selectedTxnIds : undefined,
-      };
-      await api.post("/invoice-exchanges", payload);
+      const formData = new FormData();
+      formData.append("hotelId", hotelId);
+      formData.append("exchangeDate", exchangeDate);
+      if (notes) formData.append("notes", notes);
+      formData.append(
+        "lines",
+        JSON.stringify(validLines.map((l) => ({ description: l.description.trim(), amount: Number(l.amount) }))),
+      );
+      if (selectedTxnIds.length > 0) {
+        formData.append("transactionIds", JSON.stringify(selectedTxnIds));
+      }
+      if (uploadFile) formData.append("file", uploadFile);
+      await api.post("/invoice-exchanges", formData);
     },
     onSuccess: () => {
       toast.success("Penukaran faktur tersimpan — piutang otomatis dibuat");
@@ -711,6 +755,46 @@ export default function InvoiceExchangePage() {
                       <div className="space-y-2">
                         <Label>Catatan (opsional)</Label>
                         <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+                      </div>
+
+                      {/* Upload dokumen pendukung */}
+                      <div className="space-y-2">
+                        <Label>Dokumen pendukung (opsional)</Label>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          className="sr-only"
+                          onChange={handleFileChange}
+                        />
+                        {!uploadFile ? (
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex w-full cursor-pointer items-center gap-2 rounded-md border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:bg-muted/40 hover:text-foreground"
+                          >
+                            <Paperclip className="size-4 shrink-0" />
+                            <span>Pilih file PDF, JPG, atau PNG (maks. 5MB)</span>
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                            <FileText className="size-4 shrink-0 text-primary" />
+                            <span className="flex-1 truncate text-sm font-medium">{uploadFile.name}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {(uploadFile.size / 1024).toFixed(0)} KB
+                            </span>
+                            <button
+                              type="button"
+                              onClick={removeFile}
+                              className="ml-1 shrink-0 text-muted-foreground hover:text-destructive"
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
+                        )}
+                        {fileError && (
+                          <p className="text-xs text-destructive">{fileError}</p>
+                        )}
                       </div>
 
                       {/* Preview baris dari transaksi (auto) */}

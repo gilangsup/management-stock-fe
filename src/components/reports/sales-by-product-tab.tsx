@@ -5,6 +5,15 @@ import { useCallback, useMemo, useState } from "react";
 import { Loader2, Package } from "lucide-react";
 import { toast } from "sonner";
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   Table,
   TableBody,
   TableCell,
@@ -70,6 +79,31 @@ type SalesProductRow = {
   totalAmount: string;
 };
 
+type ChartPoint = { period: string; amount: number };
+
+function resolveChartGroupBy(
+  preset: DatePreset,
+  from: string,
+  to: string,
+): "day" | "month" | "year" {
+  if (preset === "year") return "month";
+  if (preset === "custom") {
+    const days =
+      Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (days > 365) return "year";
+    if (days > 60) return "month";
+    return "day";
+  }
+  return "day";
+}
+
+function yTickFormatter(v: number): string {
+  if (v >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}M`;
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(0)}jt`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(0)}rb`;
+  return String(v);
+}
+
 export function SalesByProductTab() {
   const anchor = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [preset, setPreset] = useState<DatePreset>("month");
@@ -77,6 +111,11 @@ export function SalesByProductTab() {
   const [customTo, setCustomTo] = useState(anchor);
   const [hotelId, setHotelId] = useState("");
   const { from, to } = resolveDateRange(preset, customFrom, customTo);
+
+  const chartGroupBy = useMemo(
+    () => resolveChartGroupBy(preset, from, to),
+    [preset, from, to],
+  );
 
   const hotels = useQuery({
     queryKey: ["hotels"],
@@ -99,7 +138,29 @@ export function SalesByProductTab() {
     },
   });
 
+  const chartQuery = useQuery({
+    queryKey: ["reports", "sales-by-period-chart", from, to, hotelId, chartGroupBy],
+    queryFn: async () => {
+      const params: Record<string, string> = { from, to, groupBy: chartGroupBy };
+      if (hotelId) params.hotelId = hotelId;
+      const { data } = await api.get<{
+        data: {
+          mode: string;
+          groups: { period: string; invoiceCount: number; totalAmount: string }[];
+          grandTotal: string;
+        };
+      }>("/reports/sales-invoices", { params });
+      if (data.data.mode !== "grouped") return [];
+      return data.data.groups.map((g): ChartPoint => ({
+        period: g.period,
+        amount: Number(g.totalAmount),
+      }));
+    },
+  });
+
   const rows = query.data ?? [];
+  const chartData = chartQuery.data ?? [];
+
   const grandTotal = useMemo(
     () => rows.reduce((s, r) => s + Number(r.totalAmount), 0),
     [rows],
@@ -223,6 +284,62 @@ export function SalesByProductTab() {
         />
       </div>
 
+      {/* ── Diagram Batang Penjualan per Periode ─────────────────────────── */}
+      <div className="surface-panel rounded-2xl border border-border p-4">
+        <p className="mb-3 text-sm font-semibold text-foreground">Diagram Penjualan per Periode</p>
+        {chartQuery.isLoading ? (
+          <div className="flex h-56 items-center justify-center">
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : chartData.length === 0 ? (
+          <div className="flex h-56 items-center justify-center rounded-xl border border-dashed">
+            <p className="text-sm text-muted-foreground">
+              Tidak ada data penjualan untuk periode ini.
+            </p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="period"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tickFormatter={yTickFormatter}
+                tick={{ fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                width={72}
+              />
+              <Tooltip
+                cursor={{ fill: "hsl(var(--muted))", opacity: 0.6 }}
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null;
+                  return (
+                    <div className="rounded-lg border border-border bg-background px-3 py-2 shadow-md text-sm">
+                      <p className="mb-1 font-medium text-muted-foreground">{label}</p>
+                      <p className="font-semibold text-primary">
+                        {formatIdr(payload[0].value as number)}
+                      </p>
+                    </div>
+                  );
+                }}
+              />
+              <Bar
+                dataKey="amount"
+                fill="hsl(var(--primary))"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={64}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* ── Tabel Report per Produk (existing, tidak diubah) ─────────────── */}
       <div className="surface-table-wrap">
         <Table>
           <TableHeader>
