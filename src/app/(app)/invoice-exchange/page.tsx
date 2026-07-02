@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { CheckSquare2, FileText, Loader2, Paperclip, Pencil, Plus, Printer, Square, Trash2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CheckSquare2, FileText, Loader2, Paperclip, Pencil, Plus, Printer, Square, Trash2, X } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { pageStackWide } from "@/lib/page-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -61,6 +61,21 @@ type ExchangeDetail = {
   lines: { id: string; description: string; amount: string }[];
   linkedTransactionIds: string[];
   totalAmount: string;
+};
+
+type StockIssue = {
+  finishedProductId: string;
+  productName: string;
+  itemCode: string;
+  requiredQty: number;
+  availableStock: number;
+  shortage: number;
+};
+
+type StockValidationResult = {
+  isValid: boolean;
+  message: string;
+  details: StockIssue[];
 };
 
 export default function InvoiceExchangePage() {
@@ -145,6 +160,22 @@ export default function InvoiceExchangePage() {
     },
     enabled: open && !!hotelId,
     staleTime: 30_000,
+  });
+
+  // Validasi stok: panggil setiap kali selectedTxnIds berubah (hanya create mode)
+  const stockValidationKey = [...selectedTxnIds].sort().join(",");
+  const stockValidation = useQuery<StockValidationResult>({
+    queryKey: ["validate-exchange-stock", stockValidationKey],
+    queryFn: async () => {
+      if (!selectedTxnIds.length) return { isValid: true, message: "", details: [] };
+      const { data } = await api.get<{ success: boolean; data: StockValidationResult }>(
+        "/invoice-exchanges/validate-stock",
+        { params: { transactionIds: selectedTxnIds.join(",") } },
+      );
+      return data.data;
+    },
+    enabled: !editTarget && selectedTxnIds.length > 0,
+    staleTime: 15_000,
   });
 
   // Computed: auto-lines dari semua transaksi yang dipilih
@@ -345,7 +376,15 @@ export default function InvoiceExchangePage() {
 
   const validLines = lines.filter((l) => l.description.trim() && Number(l.amount) > 0);
   const isCreateMode = !editId;
-  const canSubmitCreate = selectedTxnIds.length > 0 && !!hotelId && validLines.length > 0;
+
+  // Stok dianggap tidak aman jika: sedang loading ATAU server mengembalikan isValid=false
+  const stockIsInvalid =
+    isCreateMode &&
+    selectedTxnIds.length > 0 &&
+    (stockValidation.isLoading || stockValidation.data?.isValid === false);
+
+  const canSubmitCreate =
+    selectedTxnIds.length > 0 && !!hotelId && validLines.length > 0 && !stockIsInvalid;
   const canSubmitEdit = !!hotelId && selectedTxnIds.length > 0;
   const canSubmit = isCreateMode ? canSubmitCreate : canSubmitEdit;
 
@@ -662,6 +701,70 @@ export default function InvoiceExchangePage() {
                         <p className="text-xs text-muted-foreground">
                           Centang satu atau lebih transaksi. Baris nominal akan terisi otomatis.
                         </p>
+                      )}
+
+                      {/* Validasi stok — hanya create mode, muncul setelah transaksi dipilih */}
+                      {selectedTxnIds.length > 0 && (
+                        <>
+                          {stockValidation.isLoading && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Loader2 className="size-3 animate-spin" />
+                              Mengecek ketersediaan stok barang jadi…
+                            </div>
+                          )}
+                          {!stockValidation.isLoading && stockValidation.data?.isValid === true && (
+                            <div className="flex items-center gap-2 text-xs text-emerald-600">
+                              <CheckCircle2 className="size-3 shrink-0" />
+                              Stok barang jadi mencukupi.
+                            </div>
+                          )}
+                          {!stockValidation.isLoading && stockValidation.data?.isValid === false && (
+                            <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-3 space-y-2">
+                              <div className="flex items-start gap-2">
+                                <AlertTriangle className="size-4 shrink-0 text-destructive mt-0.5" />
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium text-destructive">
+                                    Stok barang jadi tidak mencukupi
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Silakan tambahkan stok terlebih dahulu sebelum membuat penukaran faktur.
+                                  </p>
+                                </div>
+                              </div>
+                              {stockValidation.data.details.length > 0 && (
+                                <div className="rounded border border-destructive/20 bg-background divide-y">
+                                  {stockValidation.data.details.map((d) => (
+                                    <div
+                                      key={d.finishedProductId}
+                                      className="flex items-center justify-between px-3 py-2 text-xs"
+                                    >
+                                      <span className="font-medium text-foreground flex-1 min-w-0 truncate pr-2">
+                                        {d.productName}
+                                      </span>
+                                      <div className="flex items-center gap-3 shrink-0 tabular-nums text-muted-foreground">
+                                        <span>
+                                          Tersedia:{" "}
+                                          <span className="font-semibold text-foreground">
+                                            {d.availableStock}
+                                          </span>
+                                        </span>
+                                        <span>
+                                          Perlu:{" "}
+                                          <span className="font-semibold text-destructive">
+                                            {d.requiredQty}
+                                          </span>
+                                        </span>
+                                        <span className="text-destructive font-semibold">
+                                          −{d.shortage}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
